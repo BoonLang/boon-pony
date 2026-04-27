@@ -446,13 +446,21 @@ actor Main
 
     try
       let project = env.args(2)?
-      var command = "node tools/terminal_runner.mjs snapshot " + project
+      var size: String = "80x24"
+      var frames: USize = 120
+      var report: String = ""
       var index: USize = 3
       while index < env.args.size() do
         try
           let arg = env.args(index)?
-          if (arg == "--size") or (arg == "--frames") or (arg == "--report") then
-            command = command + " " + arg + " " + env.args(index + 1)?
+          if arg == "--size" then
+            size = env.args(index + 1)?
+            index = index + 2
+          elseif arg == "--frames" then
+            frames = env.args(index + 1)?.usize()?
+            index = index + 2
+          elseif arg == "--report" then
+            report = env.args(index + 1)?
             index = index + 2
           else
             env.err.print("error: unknown snapshot option: " + arg)
@@ -467,7 +475,7 @@ actor Main
           return
         end
       end
-      _run_tool(env, consume command)
+      NativeBoon.snapshot_command(env, project, size, frames, report)
     else
       env.err.print("error: snapshot requires an example project")
       Help.snapshot(env)

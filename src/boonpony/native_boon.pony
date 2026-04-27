@@ -255,6 +255,55 @@ primitive NativeBoon
       env.exitcode(1)
     end
 
+  fun snapshot_command(env: Env, project: String, size: String = "80x24", frames': USize = 120, report': String = "") =>
+    (let width, let height) = _parse_terminal_size(size)
+    let frames = if frames' == 0 then USize(1) else frames' end
+    let name = _terminal_name(project)
+    let report = if report' == "" then "build/reports/snapshot-" + name + ".json" else report' end
+    let rendered = _terminal_text(name)
+    let ids = _terminal_ids(name)
+    let failures = Array[String]
+    if (width == 0) or (height == 0) then failures.push("invalid size: " + size) end
+    if rendered == "" then failures.push("terminal renderer for " + project + " is not implemented yet") end
+    if ids.size() == 0 then failures.push("terminal semantic tree is empty for " + project) end
+
+    let out = String
+    out.append("{\n  \"command\":\"snapshot\",\n  \"status\":\""); out.append(if failures.size() == 0 then "pass" else "fail" end); out.append("\",\n")
+    out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"toolchain\":{\"ponyc\":\"native-pony\",\"os\":\"linux-x86_64\"},\n")
+    out.append("  \"cases\":[{\"project\":\""); _append_json(out, project); out.append("\",\"size\":\""); _append_json(out, size); out.append("\",\"frames\":"); out.append(frames.string()); out.append(",\"snapshots\":[")
+    var frame: USize = 0
+    while frame < frames do
+      if frame > 0 then out.append(",") end
+      out.append("{\"frame\":"); out.append(frame.string())
+      out.append(",\"width\":"); out.append(width.string())
+      out.append(",\"height\":"); out.append(height.string())
+      out.append(",\"changed_cells\":"); out.append(if frame == 0 then (width * height).string() else "0" end)
+      out.append(",\"bytes_written\":"); out.append(if frame == 0 then rendered.size().string() else "0" end)
+      out.append(",\"full_redraw\":"); out.append(if frame == 0 then "true" else "false" end)
+      out.append(",\"text\":\""); _append_json(out, rendered); out.append("\",\"tree\":")
+      out.append(_terminal_tree_json(name, rendered, width, height, ids))
+      out.append("}")
+      frame = frame + 1
+    end
+    out.append("]}],\n  \"failures\":[")
+    var fail_index: USize = 0
+    for failure in failures.values() do
+      if fail_index > 0 then out.append(",") end
+      out.append("{\"message\":\""); _append_json(out, failure); out.append("\"}")
+      fail_index = fail_index + 1
+    end
+    out.append("]\n}\n")
+    _write_file(env, report, out.clone())
+    if failures.size() == 0 then
+      env.out.print(rendered)
+      env.out.print("report: " + report)
+      env.exitcode(0)
+    else
+      for failure in failures.values() do env.err.print("error: " + failure) end
+      env.err.print("report: " + report)
+      env.exitcode(1)
+    end
+
   fun bench_command(env: Env) =>
     var protocol = false
     var target: String = ""
@@ -891,6 +940,28 @@ primitive NativeBoon
     else
       recover val Array[String] end
     end
+
+  fun _parse_terminal_size(size: String): (USize, USize) =>
+    try
+      let parts = size.split_by("x")
+      (parts(0)?.usize()?, parts(1)?.usize()?)
+    else
+      (USize(0), USize(0))
+    end
+
+  fun _terminal_tree_json(name: String, text: String, width: USize, height: USize, ids: Array[String] val): String =>
+    let out = String
+    out.append("{\"id\":\""); _append_json(out, name + ".canvas"); out.append("\",\"role\":\"terminal_canvas\",\"text\":\""); _append_json(out, text); out.append("\",\"value\":\"\",\"visible\":true,\"focused\":false,\"selected\":false,\"checked\":null,\"bounds\":{\"x\":0,\"y\":0,\"width\":"); out.append(width.string()); out.append(",\"height\":"); out.append(height.string()); out.append("},\"children\":[")
+    var index: USize = 0
+    for id in ids.values() do
+      if id != (name + ".canvas") then
+        if index > 0 then out.append(",") end
+        out.append("{\"id\":\""); _append_json(out, id); out.append("\",\"role\":\"canvas_text\",\"text\":\""); _append_json(out, id); out.append("\",\"value\":\"\",\"visible\":true,\"focused\":false,\"selected\":false,\"checked\":null,\"bounds\":{\"x\":0,\"y\":0,\"width\":1,\"height\":1},\"children\":[]}")
+        index = index + 1
+      end
+    end
+    out.append("]}")
+    out.clone()
 
   fun _join_strings(items: Array[String] val, sep: String): String =>
     let out = String

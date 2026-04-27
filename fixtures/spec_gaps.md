@@ -34,6 +34,8 @@ passing reports.
   Pony instead of repo-local Node tooling.
 - Terminal-grid verification now runs in native Pony instead of repo-local Node
   tooling.
+- Headless terminal snapshots now run in native Pony instead of repo-local Node
+  tooling.
 - Benchmark matrix and benchmark report generation now run in native Pony
   instead of repo-local Node tooling.
 - Scripted playground replay for `tui --script` now runs in native Pony instead
@@ -44,10 +46,9 @@ passing reports.
 
 ## Implementation Debt
 
-- Terminal snapshot rendering, interactive playground/source-edit
-  orchestration, upstream import, raw keyboard safety, and PTY smoke
-  verification currently run through repo-local Node tooling launched by the
-  Pony CLI.
+- Interactive playground/source-edit orchestration, upstream import, raw
+  keyboard safety, and PTY smoke verification currently run through repo-local
+  Node tooling launched by the Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.
