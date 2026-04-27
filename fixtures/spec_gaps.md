@@ -47,11 +47,14 @@ passing reports.
   instead of repo-local Node tooling.
 - Interactive playground orchestration and source-edit workflow handling now run
   in native Pony instead of repo-local Node tooling.
+- Upstream import orchestration, SOURCE migration, corpus manifest generation,
+  syntax inventory generation, and feature matrix generation now run in native
+  Pony instead of repo-local Node tooling.
 
 ## Implementation Debt
 
-- Upstream import and PTY smoke verification currently run through repo-local
-  Node tooling launched by the Pony CLI.
+- PTY smoke verification currently runs through repo-local Node tooling outside
+  the Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.

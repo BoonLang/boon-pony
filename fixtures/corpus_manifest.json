@@ -1,5 +1,5 @@
 {
-  "generated_by": "tools/import_upstream.mjs",
+  "generated_by": "build/bin/boonpony import-upstream",
   "source_repo": {
     "url": "https://github.com/BoonLang/boon",
     "commit": "c924d9f7d7e1c156604c9377e0487db48c278353",
@@ -8,10 +8,7 @@
     "override_root": "examples/upstream_overrides"
   },
   "shared_root_files": [
-    {
-      "path": "examples/upstream/reference_metadata.json",
-      "kind": "json"
-    }
+    {"path": "examples/upstream/reference_metadata.json", "kind": "json"}
   ],
   "examples": [
     {
@@ -20,13 +17,9 @@
       "source_path": "playground/frontend/src/examples/button_hover_test",
       "imported_path": "examples/upstream/button_hover_test",
       "entry_file": "examples/upstream/button_hover_test/button_hover_test.bn",
-      "bn_files": [
-        "examples/upstream/button_hover_test/button_hover_test.bn"
-      ],
+      "bn_files": ["examples/upstream/button_hover_test/button_hover_test.bn"],
       "expected_file": "examples/upstream/button_hover_test/button_hover_test.expected",
-      "expected_files": [
-        "examples/upstream/button_hover_test/button_hover_test.expected"
-      ],
+      "expected_files": ["examples/upstream/button_hover_test/button_hover_test.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -42,13 +35,9 @@
       "source_path": "playground/frontend/src/examples/button_hover_to_click_test",
       "imported_path": "examples/upstream/button_hover_to_click_test",
       "entry_file": "examples/upstream/button_hover_to_click_test/button_hover_to_click_test.bn",
-      "bn_files": [
-        "examples/upstream/button_hover_to_click_test/button_hover_to_click_test.bn"
-      ],
+      "bn_files": ["examples/upstream/button_hover_to_click_test/button_hover_to_click_test.bn"],
       "expected_file": "examples/upstream/button_hover_to_click_test/button_hover_to_click_test.expected",
-      "expected_files": [
-        "examples/upstream/button_hover_to_click_test/button_hover_to_click_test.expected"
-      ],
+      "expected_files": ["examples/upstream/button_hover_to_click_test/button_hover_to_click_test.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -64,13 +53,9 @@
       "source_path": "playground/frontend/src/examples/cells",
       "imported_path": "examples/upstream/cells",
       "entry_file": "examples/upstream/cells/cells.bn",
-      "bn_files": [
-        "examples/upstream/cells/cells.bn"
-      ],
+      "bn_files": ["examples/upstream/cells/cells.bn"],
       "expected_file": "examples/upstream/cells/cells.expected",
-      "expected_files": [
-        "examples/upstream/cells/cells.expected"
-      ],
+      "expected_files": ["examples/upstream/cells/cells.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -86,13 +71,9 @@
       "source_path": "playground/frontend/src/examples/cells_dynamic",
       "imported_path": "examples/upstream/cells_dynamic",
       "entry_file": "examples/upstream/cells_dynamic/cells_dynamic.bn",
-      "bn_files": [
-        "examples/upstream/cells_dynamic/cells_dynamic.bn"
-      ],
+      "bn_files": ["examples/upstream/cells_dynamic/cells_dynamic.bn"],
       "expected_file": "examples/upstream/cells_dynamic/cells_dynamic.expected",
-      "expected_files": [
-        "examples/upstream/cells_dynamic/cells_dynamic.expected"
-      ],
+      "expected_files": ["examples/upstream/cells_dynamic/cells_dynamic.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -108,13 +89,9 @@
       "source_path": "playground/frontend/src/examples/chained_list_remove_bug",
       "imported_path": "examples/upstream/chained_list_remove_bug",
       "entry_file": "examples/upstream/chained_list_remove_bug/chained_list_remove_bug.bn",
-      "bn_files": [
-        "examples/upstream/chained_list_remove_bug/chained_list_remove_bug.bn"
-      ],
+      "bn_files": ["examples/upstream/chained_list_remove_bug/chained_list_remove_bug.bn"],
       "expected_file": "examples/upstream/chained_list_remove_bug/chained_list_remove_bug.expected",
-      "expected_files": [
-        "examples/upstream/chained_list_remove_bug/chained_list_remove_bug.expected"
-      ],
+      "expected_files": ["examples/upstream/chained_list_remove_bug/chained_list_remove_bug.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -130,13 +107,9 @@
       "source_path": "playground/frontend/src/examples/checkbox_test",
       "imported_path": "examples/upstream/checkbox_test",
       "entry_file": "examples/upstream/checkbox_test/checkbox_test.bn",
-      "bn_files": [
-        "examples/upstream/checkbox_test/checkbox_test.bn"
-      ],
+      "bn_files": ["examples/upstream/checkbox_test/checkbox_test.bn"],
       "expected_file": "examples/upstream/checkbox_test/checkbox_test.expected",
-      "expected_files": [
-        "examples/upstream/checkbox_test/checkbox_test.expected"
-      ],
+      "expected_files": ["examples/upstream/checkbox_test/checkbox_test.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -152,9 +125,7 @@
       "source_path": "playground/frontend/src/examples/checkbox_test.bn",
       "imported_path": "examples/upstream/checkbox_test.bn",
       "entry_file": "examples/upstream/checkbox_test.bn",
-      "bn_files": [
-        "examples/upstream/checkbox_test.bn"
-      ],
+      "bn_files": ["examples/upstream/checkbox_test.bn"],
       "expected_file": null,
       "expected_files": [],
       "parser_status": "NOT_RUN",
@@ -172,13 +143,9 @@
       "source_path": "playground/frontend/src/examples/circle_drawer",
       "imported_path": "examples/upstream/circle_drawer",
       "entry_file": "examples/upstream/circle_drawer/circle_drawer.bn",
-      "bn_files": [
-        "examples/upstream/circle_drawer/circle_drawer.bn"
-      ],
+      "bn_files": ["examples/upstream/circle_drawer/circle_drawer.bn"],
       "expected_file": "examples/upstream/circle_drawer/circle_drawer.expected",
-      "expected_files": [
-        "examples/upstream/circle_drawer/circle_drawer.expected"
-      ],
+      "expected_files": ["examples/upstream/circle_drawer/circle_drawer.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -194,13 +161,9 @@
       "source_path": "playground/frontend/src/examples/complex_counter",
       "imported_path": "examples/upstream/complex_counter",
       "entry_file": "examples/upstream/complex_counter/complex_counter.bn",
-      "bn_files": [
-        "examples/upstream/complex_counter/complex_counter.bn"
-      ],
+      "bn_files": ["examples/upstream/complex_counter/complex_counter.bn"],
       "expected_file": "examples/upstream/complex_counter/complex_counter.expected",
-      "expected_files": [
-        "examples/upstream/complex_counter/complex_counter.expected"
-      ],
+      "expected_files": ["examples/upstream/complex_counter/complex_counter.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -216,13 +179,9 @@
       "source_path": "playground/frontend/src/examples/counter",
       "imported_path": "examples/upstream/counter",
       "entry_file": "examples/upstream/counter/counter.bn",
-      "bn_files": [
-        "examples/upstream/counter/counter.bn"
-      ],
+      "bn_files": ["examples/upstream/counter/counter.bn"],
       "expected_file": "examples/upstream/counter/counter.expected",
-      "expected_files": [
-        "examples/upstream/counter/counter.expected"
-      ],
+      "expected_files": ["examples/upstream/counter/counter.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -238,13 +197,9 @@
       "source_path": "playground/frontend/src/examples/counter_hold",
       "imported_path": "examples/upstream/counter_hold",
       "entry_file": "examples/upstream/counter_hold/counter_hold.bn",
-      "bn_files": [
-        "examples/upstream/counter_hold/counter_hold.bn"
-      ],
+      "bn_files": ["examples/upstream/counter_hold/counter_hold.bn"],
       "expected_file": "examples/upstream/counter_hold/counter_hold.expected",
-      "expected_files": [
-        "examples/upstream/counter_hold/counter_hold.expected"
-      ],
+      "expected_files": ["examples/upstream/counter_hold/counter_hold.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -260,13 +215,9 @@
       "source_path": "playground/frontend/src/examples/crud",
       "imported_path": "examples/upstream/crud",
       "entry_file": "examples/upstream/crud/crud.bn",
-      "bn_files": [
-        "examples/upstream/crud/crud.bn"
-      ],
+      "bn_files": ["examples/upstream/crud/crud.bn"],
       "expected_file": "examples/upstream/crud/crud.expected",
-      "expected_files": [
-        "examples/upstream/crud/crud.expected"
-      ],
+      "expected_files": ["examples/upstream/crud/crud.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -282,13 +233,9 @@
       "source_path": "playground/frontend/src/examples/fibonacci",
       "imported_path": "examples/upstream/fibonacci",
       "entry_file": "examples/upstream/fibonacci/fibonacci.bn",
-      "bn_files": [
-        "examples/upstream/fibonacci/fibonacci.bn"
-      ],
+      "bn_files": ["examples/upstream/fibonacci/fibonacci.bn"],
       "expected_file": "examples/upstream/fibonacci/fibonacci.expected",
-      "expected_files": [
-        "examples/upstream/fibonacci/fibonacci.expected"
-      ],
+      "expected_files": ["examples/upstream/fibonacci/fibonacci.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -304,13 +251,9 @@
       "source_path": "playground/frontend/src/examples/filter_checkbox_bug",
       "imported_path": "examples/upstream/filter_checkbox_bug",
       "entry_file": "examples/upstream/filter_checkbox_bug/filter_checkbox_bug.bn",
-      "bn_files": [
-        "examples/upstream/filter_checkbox_bug/filter_checkbox_bug.bn"
-      ],
+      "bn_files": ["examples/upstream/filter_checkbox_bug/filter_checkbox_bug.bn"],
       "expected_file": "examples/upstream/filter_checkbox_bug/filter_checkbox_bug.expected",
-      "expected_files": [
-        "examples/upstream/filter_checkbox_bug/filter_checkbox_bug.expected"
-      ],
+      "expected_files": ["examples/upstream/filter_checkbox_bug/filter_checkbox_bug.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -326,13 +269,9 @@
       "source_path": "playground/frontend/src/examples/flight_booker",
       "imported_path": "examples/upstream/flight_booker",
       "entry_file": "examples/upstream/flight_booker/flight_booker.bn",
-      "bn_files": [
-        "examples/upstream/flight_booker/flight_booker.bn"
-      ],
+      "bn_files": ["examples/upstream/flight_booker/flight_booker.bn"],
       "expected_file": "examples/upstream/flight_booker/flight_booker.expected",
-      "expected_files": [
-        "examples/upstream/flight_booker/flight_booker.expected"
-      ],
+      "expected_files": ["examples/upstream/flight_booker/flight_booker.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -348,13 +287,9 @@
       "source_path": "playground/frontend/src/examples/hello_world",
       "imported_path": "examples/upstream/hello_world",
       "entry_file": "examples/upstream/hello_world/hello_world.bn",
-      "bn_files": [
-        "examples/upstream/hello_world/hello_world.bn"
-      ],
+      "bn_files": ["examples/upstream/hello_world/hello_world.bn"],
       "expected_file": "examples/upstream/hello_world/hello_world.expected",
-      "expected_files": [
-        "examples/upstream/hello_world/hello_world.expected"
-      ],
+      "expected_files": ["examples/upstream/hello_world/hello_world.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -370,23 +305,7 @@
       "source_path": "playground/frontend/src/examples/hw_examples",
       "imported_path": "examples/upstream/hw_examples",
       "entry_file": "examples/upstream/hw_examples/alu.bn",
-      "bn_files": [
-        "examples/upstream/hw_examples/alu.bn",
-        "examples/upstream/hw_examples/counter.bn",
-        "examples/upstream/hw_examples/cycleadder_arst.bn",
-        "examples/upstream/hw_examples/dff_masterslave.bn",
-        "examples/upstream/hw_examples/dlatch_gate.bn",
-        "examples/upstream/hw_examples/fsm.bn",
-        "examples/upstream/hw_examples/fulladder.bn",
-        "examples/upstream/hw_examples/lfsr.bn",
-        "examples/upstream/hw_examples/prio_encoder.bn",
-        "examples/upstream/hw_examples/ram.bn",
-        "examples/upstream/hw_examples/rom.bn",
-        "examples/upstream/hw_examples/serialadder.bn",
-        "examples/upstream/hw_examples/sr_gate.bn",
-        "examples/upstream/hw_examples/sr_neg_gate.bn",
-        "examples/upstream/hw_examples/super_counter/super_counter.bn"
-      ],
+      "bn_files": ["examples/upstream/hw_examples/alu.bn", "examples/upstream/hw_examples/counter.bn", "examples/upstream/hw_examples/cycleadder_arst.bn", "examples/upstream/hw_examples/dff_masterslave.bn", "examples/upstream/hw_examples/dlatch_gate.bn", "examples/upstream/hw_examples/fsm.bn", "examples/upstream/hw_examples/fulladder.bn", "examples/upstream/hw_examples/lfsr.bn", "examples/upstream/hw_examples/prio_encoder.bn", "examples/upstream/hw_examples/ram.bn", "examples/upstream/hw_examples/rom.bn", "examples/upstream/hw_examples/serialadder.bn", "examples/upstream/hw_examples/sr_gate.bn", "examples/upstream/hw_examples/sr_neg_gate.bn", "examples/upstream/hw_examples/super_counter/super_counter.bn"],
       "expected_file": null,
       "expected_files": [],
       "parser_status": "NOT_RUN",
@@ -404,13 +323,9 @@
       "source_path": "playground/frontend/src/examples/interval",
       "imported_path": "examples/upstream/interval",
       "entry_file": "examples/upstream/interval/interval.bn",
-      "bn_files": [
-        "examples/upstream/interval/interval.bn"
-      ],
+      "bn_files": ["examples/upstream/interval/interval.bn"],
       "expected_file": "examples/upstream/interval/interval.expected",
-      "expected_files": [
-        "examples/upstream/interval/interval.expected"
-      ],
+      "expected_files": ["examples/upstream/interval/interval.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -426,13 +341,9 @@
       "source_path": "playground/frontend/src/examples/interval_hold",
       "imported_path": "examples/upstream/interval_hold",
       "entry_file": "examples/upstream/interval_hold/interval_hold.bn",
-      "bn_files": [
-        "examples/upstream/interval_hold/interval_hold.bn"
-      ],
+      "bn_files": ["examples/upstream/interval_hold/interval_hold.bn"],
       "expected_file": "examples/upstream/interval_hold/interval_hold.expected",
-      "expected_files": [
-        "examples/upstream/interval_hold/interval_hold.expected"
-      ],
+      "expected_files": ["examples/upstream/interval_hold/interval_hold.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -448,13 +359,9 @@
       "source_path": "playground/frontend/src/examples/latest",
       "imported_path": "examples/upstream/latest",
       "entry_file": "examples/upstream/latest/latest.bn",
-      "bn_files": [
-        "examples/upstream/latest/latest.bn"
-      ],
+      "bn_files": ["examples/upstream/latest/latest.bn"],
       "expected_file": "examples/upstream/latest/latest.expected",
-      "expected_files": [
-        "examples/upstream/latest/latest.expected"
-      ],
+      "expected_files": ["examples/upstream/latest/latest.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -470,13 +377,9 @@
       "source_path": "playground/frontend/src/examples/layers",
       "imported_path": "examples/upstream/layers",
       "entry_file": "examples/upstream/layers/layers.bn",
-      "bn_files": [
-        "examples/upstream/layers/layers.bn"
-      ],
+      "bn_files": ["examples/upstream/layers/layers.bn"],
       "expected_file": "examples/upstream/layers/layers.expected",
-      "expected_files": [
-        "examples/upstream/layers/layers.expected"
-      ],
+      "expected_files": ["examples/upstream/layers/layers.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -492,13 +395,9 @@
       "source_path": "playground/frontend/src/examples/list_map_block",
       "imported_path": "examples/upstream/list_map_block",
       "entry_file": "examples/upstream/list_map_block/list_map_block.bn",
-      "bn_files": [
-        "examples/upstream/list_map_block/list_map_block.bn"
-      ],
+      "bn_files": ["examples/upstream/list_map_block/list_map_block.bn"],
       "expected_file": "examples/upstream/list_map_block/list_map_block.expected",
-      "expected_files": [
-        "examples/upstream/list_map_block/list_map_block.expected"
-      ],
+      "expected_files": ["examples/upstream/list_map_block/list_map_block.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -514,13 +413,9 @@
       "source_path": "playground/frontend/src/examples/list_map_external_dep",
       "imported_path": "examples/upstream/list_map_external_dep",
       "entry_file": "examples/upstream/list_map_external_dep/list_map_external_dep.bn",
-      "bn_files": [
-        "examples/upstream/list_map_external_dep/list_map_external_dep.bn"
-      ],
+      "bn_files": ["examples/upstream/list_map_external_dep/list_map_external_dep.bn"],
       "expected_file": "examples/upstream/list_map_external_dep/list_map_external_dep.expected",
-      "expected_files": [
-        "examples/upstream/list_map_external_dep/list_map_external_dep.expected"
-      ],
+      "expected_files": ["examples/upstream/list_map_external_dep/list_map_external_dep.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -536,13 +431,9 @@
       "source_path": "playground/frontend/src/examples/list_object_state",
       "imported_path": "examples/upstream/list_object_state",
       "entry_file": "examples/upstream/list_object_state/list_object_state.bn",
-      "bn_files": [
-        "examples/upstream/list_object_state/list_object_state.bn"
-      ],
+      "bn_files": ["examples/upstream/list_object_state/list_object_state.bn"],
       "expected_file": "examples/upstream/list_object_state/list_object_state.expected",
-      "expected_files": [
-        "examples/upstream/list_object_state/list_object_state.expected"
-      ],
+      "expected_files": ["examples/upstream/list_object_state/list_object_state.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -558,13 +449,9 @@
       "source_path": "playground/frontend/src/examples/list_retain_count",
       "imported_path": "examples/upstream/list_retain_count",
       "entry_file": "examples/upstream/list_retain_count/list_retain_count.bn",
-      "bn_files": [
-        "examples/upstream/list_retain_count/list_retain_count.bn"
-      ],
+      "bn_files": ["examples/upstream/list_retain_count/list_retain_count.bn"],
       "expected_file": "examples/upstream/list_retain_count/list_retain_count.expected",
-      "expected_files": [
-        "examples/upstream/list_retain_count/list_retain_count.expected"
-      ],
+      "expected_files": ["examples/upstream/list_retain_count/list_retain_count.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -580,13 +467,9 @@
       "source_path": "playground/frontend/src/examples/list_retain_reactive",
       "imported_path": "examples/upstream/list_retain_reactive",
       "entry_file": "examples/upstream/list_retain_reactive/list_retain_reactive.bn",
-      "bn_files": [
-        "examples/upstream/list_retain_reactive/list_retain_reactive.bn"
-      ],
+      "bn_files": ["examples/upstream/list_retain_reactive/list_retain_reactive.bn"],
       "expected_file": "examples/upstream/list_retain_reactive/list_retain_reactive.expected",
-      "expected_files": [
-        "examples/upstream/list_retain_reactive/list_retain_reactive.expected"
-      ],
+      "expected_files": ["examples/upstream/list_retain_reactive/list_retain_reactive.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -602,13 +485,9 @@
       "source_path": "playground/frontend/src/examples/list_retain_remove",
       "imported_path": "examples/upstream/list_retain_remove",
       "entry_file": "examples/upstream/list_retain_remove/list_retain_remove.bn",
-      "bn_files": [
-        "examples/upstream/list_retain_remove/list_retain_remove.bn"
-      ],
+      "bn_files": ["examples/upstream/list_retain_remove/list_retain_remove.bn"],
       "expected_file": "examples/upstream/list_retain_remove/list_retain_remove.expected",
-      "expected_files": [
-        "examples/upstream/list_retain_remove/list_retain_remove.expected"
-      ],
+      "expected_files": ["examples/upstream/list_retain_remove/list_retain_remove.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -624,13 +503,9 @@
       "source_path": "playground/frontend/src/examples/minimal",
       "imported_path": "examples/upstream/minimal",
       "entry_file": "examples/upstream/minimal/minimal.bn",
-      "bn_files": [
-        "examples/upstream/minimal/minimal.bn"
-      ],
+      "bn_files": ["examples/upstream/minimal/minimal.bn"],
       "expected_file": "examples/upstream/minimal/minimal.expected",
-      "expected_files": [
-        "examples/upstream/minimal/minimal.expected"
-      ],
+      "expected_files": ["examples/upstream/minimal/minimal.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -646,13 +521,9 @@
       "source_path": "playground/frontend/src/examples/pages",
       "imported_path": "examples/upstream/pages",
       "entry_file": "examples/upstream/pages/pages.bn",
-      "bn_files": [
-        "examples/upstream/pages/pages.bn"
-      ],
+      "bn_files": ["examples/upstream/pages/pages.bn"],
       "expected_file": "examples/upstream/pages/pages.expected",
-      "expected_files": [
-        "examples/upstream/pages/pages.expected"
-      ],
+      "expected_files": ["examples/upstream/pages/pages.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -668,13 +539,9 @@
       "source_path": "playground/frontend/src/examples/shopping_list",
       "imported_path": "examples/upstream/shopping_list",
       "entry_file": "examples/upstream/shopping_list/shopping_list.bn",
-      "bn_files": [
-        "examples/upstream/shopping_list/shopping_list.bn"
-      ],
+      "bn_files": ["examples/upstream/shopping_list/shopping_list.bn"],
       "expected_file": "examples/upstream/shopping_list/shopping_list.expected",
-      "expected_files": [
-        "examples/upstream/shopping_list/shopping_list.expected"
-      ],
+      "expected_files": ["examples/upstream/shopping_list/shopping_list.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -690,13 +557,9 @@
       "source_path": "playground/frontend/src/examples/switch_hold_test",
       "imported_path": "examples/upstream/switch_hold_test",
       "entry_file": "examples/upstream/switch_hold_test/switch_hold_test.bn",
-      "bn_files": [
-        "examples/upstream/switch_hold_test/switch_hold_test.bn"
-      ],
+      "bn_files": ["examples/upstream/switch_hold_test/switch_hold_test.bn"],
       "expected_file": "examples/upstream/switch_hold_test/switch_hold_test.expected",
-      "expected_files": [
-        "examples/upstream/switch_hold_test/switch_hold_test.expected"
-      ],
+      "expected_files": ["examples/upstream/switch_hold_test/switch_hold_test.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -712,13 +575,9 @@
       "source_path": "playground/frontend/src/examples/temperature_converter",
       "imported_path": "examples/upstream/temperature_converter",
       "entry_file": "examples/upstream/temperature_converter/temperature_converter.bn",
-      "bn_files": [
-        "examples/upstream/temperature_converter/temperature_converter.bn"
-      ],
+      "bn_files": ["examples/upstream/temperature_converter/temperature_converter.bn"],
       "expected_file": "examples/upstream/temperature_converter/temperature_converter.expected",
-      "expected_files": [
-        "examples/upstream/temperature_converter/temperature_converter.expected"
-      ],
+      "expected_files": ["examples/upstream/temperature_converter/temperature_converter.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -734,13 +593,9 @@
       "source_path": "playground/frontend/src/examples/text_interpolation_update",
       "imported_path": "examples/upstream/text_interpolation_update",
       "entry_file": "examples/upstream/text_interpolation_update/text_interpolation_update.bn",
-      "bn_files": [
-        "examples/upstream/text_interpolation_update/text_interpolation_update.bn"
-      ],
+      "bn_files": ["examples/upstream/text_interpolation_update/text_interpolation_update.bn"],
       "expected_file": "examples/upstream/text_interpolation_update/text_interpolation_update.expected",
-      "expected_files": [
-        "examples/upstream/text_interpolation_update/text_interpolation_update.expected"
-      ],
+      "expected_files": ["examples/upstream/text_interpolation_update/text_interpolation_update.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -756,13 +611,9 @@
       "source_path": "playground/frontend/src/examples/then",
       "imported_path": "examples/upstream/then",
       "entry_file": "examples/upstream/then/then.bn",
-      "bn_files": [
-        "examples/upstream/then/then.bn"
-      ],
+      "bn_files": ["examples/upstream/then/then.bn"],
       "expected_file": "examples/upstream/then/then.expected",
-      "expected_files": [
-        "examples/upstream/then/then.expected"
-      ],
+      "expected_files": ["examples/upstream/then/then.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -778,13 +629,9 @@
       "source_path": "playground/frontend/src/examples/timer",
       "imported_path": "examples/upstream/timer",
       "entry_file": "examples/upstream/timer/timer.bn",
-      "bn_files": [
-        "examples/upstream/timer/timer.bn"
-      ],
+      "bn_files": ["examples/upstream/timer/timer.bn"],
       "expected_file": "examples/upstream/timer/timer.expected",
-      "expected_files": [
-        "examples/upstream/timer/timer.expected"
-      ],
+      "expected_files": ["examples/upstream/timer/timer.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -800,13 +647,9 @@
       "source_path": "playground/frontend/src/examples/todo_mvc",
       "imported_path": "examples/upstream/todo_mvc",
       "entry_file": "examples/upstream/todo_mvc/todo_mvc.bn",
-      "bn_files": [
-        "examples/upstream/todo_mvc/todo_mvc.bn"
-      ],
+      "bn_files": ["examples/upstream/todo_mvc/todo_mvc.bn"],
       "expected_file": "examples/upstream/todo_mvc/todo_mvc.expected",
-      "expected_files": [
-        "examples/upstream/todo_mvc/todo_mvc.expected"
-      ],
+      "expected_files": ["examples/upstream/todo_mvc/todo_mvc.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -822,20 +665,9 @@
       "source_path": "playground/frontend/src/examples/todo_mvc_physical",
       "imported_path": "examples/upstream/todo_mvc_physical",
       "entry_file": "examples/upstream/todo_mvc_physical/BUILD.bn",
-      "bn_files": [
-        "examples/upstream/todo_mvc_physical/BUILD.bn",
-        "examples/upstream/todo_mvc_physical/Generated/Assets.bn",
-        "examples/upstream/todo_mvc_physical/RUN.bn",
-        "examples/upstream/todo_mvc_physical/Theme/Glassmorphism.bn",
-        "examples/upstream/todo_mvc_physical/Theme/Neobrutalism.bn",
-        "examples/upstream/todo_mvc_physical/Theme/Neumorphism.bn",
-        "examples/upstream/todo_mvc_physical/Theme/Professional.bn",
-        "examples/upstream/todo_mvc_physical/Theme/Theme.bn"
-      ],
+      "bn_files": ["examples/upstream/todo_mvc_physical/BUILD.bn", "examples/upstream/todo_mvc_physical/Generated/Assets.bn", "examples/upstream/todo_mvc_physical/RUN.bn", "examples/upstream/todo_mvc_physical/Theme/Glassmorphism.bn", "examples/upstream/todo_mvc_physical/Theme/Neobrutalism.bn", "examples/upstream/todo_mvc_physical/Theme/Neumorphism.bn", "examples/upstream/todo_mvc_physical/Theme/Professional.bn", "examples/upstream/todo_mvc_physical/Theme/Theme.bn"],
       "expected_file": "examples/upstream/todo_mvc_physical/todo_mvc_physical.expected",
-      "expected_files": [
-        "examples/upstream/todo_mvc_physical/todo_mvc_physical.expected"
-      ],
+      "expected_files": ["examples/upstream/todo_mvc_physical/todo_mvc_physical.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -851,13 +683,9 @@
       "source_path": "playground/frontend/src/examples/when",
       "imported_path": "examples/upstream/when",
       "entry_file": "examples/upstream/when/when.bn",
-      "bn_files": [
-        "examples/upstream/when/when.bn"
-      ],
+      "bn_files": ["examples/upstream/when/when.bn"],
       "expected_file": "examples/upstream/when/when.expected",
-      "expected_files": [
-        "examples/upstream/when/when.expected"
-      ],
+      "expected_files": ["examples/upstream/when/when.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -873,13 +701,9 @@
       "source_path": "playground/frontend/src/examples/while",
       "imported_path": "examples/upstream/while",
       "entry_file": "examples/upstream/while/while.bn",
-      "bn_files": [
-        "examples/upstream/while/while.bn"
-      ],
+      "bn_files": ["examples/upstream/while/while.bn"],
       "expected_file": "examples/upstream/while/while.expected",
-      "expected_files": [
-        "examples/upstream/while/while.expected"
-      ],
+      "expected_files": ["examples/upstream/while/while.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",
@@ -895,13 +719,9 @@
       "source_path": "playground/frontend/src/examples/while_function_call",
       "imported_path": "examples/upstream/while_function_call",
       "entry_file": "examples/upstream/while_function_call/while_function_call.bn",
-      "bn_files": [
-        "examples/upstream/while_function_call/while_function_call.bn"
-      ],
+      "bn_files": ["examples/upstream/while_function_call/while_function_call.bn"],
       "expected_file": "examples/upstream/while_function_call/while_function_call.expected",
-      "expected_files": [
-        "examples/upstream/while_function_call/while_function_call.expected"
-      ],
+      "expected_files": ["examples/upstream/while_function_call/while_function_call.expected"],
       "parser_status": "NOT_RUN",
       "source_shape_status": "NOT_RUN",
       "runtime_status": "NOT_RUN",

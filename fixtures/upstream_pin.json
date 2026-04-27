@@ -4,6 +4,6 @@
   "source_root": "playground/frontend/src/examples",
   "imported_root": "examples/upstream",
   "override_root": "examples/upstream_overrides",
-  "tree_hash": "295c68d7c6bfc74c96f67a4d8b182615d7d47ad5a0dcace7e5d52cb0549609df",
-  "tree_hash_command": "node tools/import_upstream.mjs internal tree hash over examples/upstream and examples/upstream_overrides"
+  "tree_hash": "pony-3402526413",
+  "tree_hash_command": "build/bin/boonpony import-upstream native tree checksum over examples/upstream and examples/upstream_overrides"
 }

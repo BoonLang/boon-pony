@@ -177,7 +177,7 @@ actor Main
       return
     end
 
-      _run_tool(env, "node tools/import_upstream.mjs --source " + source + " --commit " + commit)
+    NativeImport.import_command(env, source, commit)
 
   fun _command_parse(env: Env) =>
     if _has_help(env) then
