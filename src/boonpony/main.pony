@@ -36,10 +36,10 @@ actor Main
     if _has_help(env) then
       Help.tui(env)
     else
-      var command = "node tools/playground_runner.mjs run"
       var script: String = ""
       var report: String = ""
       var keyboard_mode = false
+      var example: String = ""
       var index: USize = 2
       while index < env.args.size() do
         try
@@ -62,11 +62,10 @@ actor Main
               env.exitcode(2)
               return
             end
-            command = command + " --example " + env.args(index + 1)?
+            example = env.args(index + 1)?
             index = index + 2
           elseif arg == "--report" then
             report = env.args(index + 1)?
-            command = command + " --report " + report
             index = index + 2
           else
             env.err.print("error: unknown tui option: " + arg)
@@ -89,7 +88,7 @@ actor Main
       elseif keyboard_mode then
         NativeSafety.keyboard_test_command(env)
       else
-        _run_tool(env, consume command)
+        NativePlayground.run(env, example, report)
       end
     end
 

@@ -45,12 +45,13 @@ passing reports.
 - Code generation orchestration, `ponyc` build invocation, generated JSONL
   protocol smoke checks, and direct-play launchers now run in native Pony
   instead of repo-local Node tooling.
+- Interactive playground orchestration and source-edit workflow handling now run
+  in native Pony instead of repo-local Node tooling.
 
 ## Implementation Debt
 
-- Interactive playground/source-edit orchestration, upstream import, and PTY
-  smoke verification currently run through repo-local Node tooling launched by
-  the Pony CLI.
+- Upstream import and PTY smoke verification currently run through repo-local
+  Node tooling launched by the Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.
