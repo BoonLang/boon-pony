@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const DEFAULT_REPORT = "build/reports/playground-script.json";
 const BAD_LOG_PATTERN = /\b(error|panic|corrupt|ExpectedRecordValue)\b/i;
@@ -70,6 +71,9 @@ class Playground {
     this.wrapBackward = false;
     this.mouseSelectedTodo = false;
     this.replayed = false;
+    this.exampleMode = example ? normalizeExample(example) : null;
+    this.sourceWorkspaces = new Map();
+    this.sourceEditMode = false;
     this.state = {
       counter: { value: 0 },
       interval: { value: 0, activeMs: 0 },
@@ -84,6 +88,7 @@ class Playground {
       crud: { records: [] },
       circle_drawer: { circles: 0, history: [] }
     };
+    if (this.exampleMode) this.workspaceForActive();
   }
 
   activeTab() {
@@ -200,6 +205,8 @@ class Playground {
   }
 
   routeToActive(key) {
+    if (this.handleSourceKey(key)) return;
+
     const id = this.activeTab().id;
     if (id === "counter" && (key === "Enter" || key === "Space" || key === "+")) {
       this.state.counter.value += 1;
@@ -286,6 +293,122 @@ class Playground {
     }
   }
 
+  handleSourceKey(key) {
+    if (key === "e") {
+      this.sourceEditMode = !this.sourceEditMode;
+      this.workspaceForActive();
+      this.log(`Source edit mode: ${this.sourceEditMode ? "on" : "off"}`);
+      return true;
+    }
+    if (!this.sourceEditMode) return false;
+
+    if (key === "v") {
+      const workspace = this.workspaceForActive();
+      workspace.content = applyValidEdit(workspace.content);
+      workspace.dirty = workspace.content !== workspace.original;
+      workspace.diagnostics = diagnoseSource(workspace.content);
+      writeWorkingSource(workspace);
+      this.log("Valid edit applied");
+      return true;
+    }
+    if (key === "!") {
+      const workspace = this.workspaceForActive();
+      workspace.content = applyInvalidEdit(workspace.content);
+      workspace.dirty = workspace.content !== workspace.original;
+      workspace.diagnostics = diagnoseSource(workspace.content);
+      writeWorkingSource(workspace);
+      this.log("Diagnostic: invalid source marker");
+      return true;
+    }
+    if (key === "r") {
+      const workspace = this.workspaceForActive();
+      if (fs.existsSync(workspace.workingPath)) workspace.content = fs.readFileSync(workspace.workingPath, "utf8");
+      workspace.diagnostics = diagnoseSource(workspace.content);
+      workspace.dirty = workspace.content !== workspace.original;
+      this.log("Reloaded working source");
+      return true;
+    }
+    if (key === "b") {
+      const workspace = this.workspaceForActive();
+      workspace.diagnostics = diagnoseSource(workspace.content);
+      if (workspace.diagnostics.length === 0) {
+        const report = `build/reports/source-edit-build-${this.activeTab().id}.json`;
+        const build = spawnSync("node", ["tools/codegen_runtime.mjs", "build", workspace.project, "--report", report], {
+          encoding: "utf8",
+          timeout: 30000,
+          maxBuffer: 1024 * 1024,
+          env: process.env
+        });
+        workspace.buildStatus = build.status === 0 ? "passed" : "failed";
+        workspace.buildReport = report;
+      } else {
+        workspace.buildStatus = "blocked by diagnostics";
+      }
+      this.log(`Build: ${workspace.buildStatus}`);
+      return true;
+    }
+    if (key === "p") {
+      const workspace = this.workspaceForActive();
+      workspace.runStatus = `${this.activeTab().title} preview restarted`;
+      if (this.activeTab().id === "pong") {
+        this.state.pong.running = false;
+        this.state.pong.rally = false;
+        this.state.pong.score = "0 : 0";
+      }
+      this.log(`Rerun: ${workspace.runStatus}`);
+      return true;
+    }
+    if (key === "d") {
+      const workspace = this.workspaceForActive();
+      workspace.diff = sourceDiff(workspace.original, workspace.content);
+      this.log(`Working diff: ${workspace.diff.length}`);
+      return true;
+    }
+    if (key === "o") {
+      const workspace = this.workspaceForActive();
+      writeWorkingSource(workspace);
+      if (process.env.BOONPONY_OPEN_EDITOR === "1" && process.stdin.isTTY && process.stdin.setRawMode) {
+        restoreTerminal();
+        process.stdin.setRawMode(false);
+      }
+      workspace.editorStatus = openExternalEditor(workspace.workingPath);
+      if (process.env.BOONPONY_OPEN_EDITOR === "1" && process.stdin.isTTY && process.stdin.setRawMode) {
+        process.stdin.setRawMode(true);
+        enterTerminal();
+      }
+      workspace.content = fs.existsSync(workspace.workingPath) ? fs.readFileSync(workspace.workingPath, "utf8") : workspace.content;
+      workspace.diagnostics = diagnoseSource(workspace.content);
+      workspace.dirty = workspace.content !== workspace.original;
+      this.log(`External editor: ${workspace.editorStatus}`);
+      return true;
+    }
+    return false;
+  }
+
+  workspaceForActive() {
+    const tab = this.activeTab();
+    if (this.sourceWorkspaces.has(tab.id)) return this.sourceWorkspaces.get(tab.id);
+    const original = fs.existsSync(tab.source) ? fs.readFileSync(tab.source, "utf8") : "";
+    const workingPath = path.join("build", "playground-working", `${tab.id}.bn`);
+    const workspace = {
+      sourcePath: tab.source,
+      workingPath,
+      project: projectForTab(tab),
+      original,
+      content: original,
+      dirty: false,
+      diagnostics: diagnoseSource(original),
+      diff: [],
+      buildStatus: "not run",
+      buildReport: "",
+      runStatus: "not run",
+      editorStatus: "not opened"
+    };
+    writeWorkingSource(workspace);
+    this.sourceWorkspaces.set(tab.id, workspace);
+    return workspace;
+  }
+
   handleMouse(x, y) {
     if (y <= 1) {
       const index = tabIndexForX(x);
@@ -340,7 +463,7 @@ class Playground {
     const leftWidth = Math.max(28, Math.floor(safeWidth * 0.32));
     const rightWidth = Math.max(24, Math.floor(safeWidth * 0.22));
     const previewWidth = safeWidth - leftWidth - rightWidth - 4;
-    const source = box("Source", [`${active.source}`, ...loadSourcePreview(active.source, bodyHeight - 4)], leftWidth, bodyHeight);
+    const source = box("Source", sourceLines(this, bodyHeight - 4), leftWidth, bodyHeight);
     const preview = box("Preview", previewLines(this), previewWidth, bodyHeight);
     const inspector = box("Inspector", inspectorLines(this), rightWidth, bodyHeight);
     const rows = [header, tabs];
@@ -355,6 +478,7 @@ class Playground {
 
   summaryLines() {
     const state = this.snapshotState();
+    const workspace = this.sourceWorkspaces.get(this.activeTab().id);
     return [
       "playground summary:",
       `Counter increments: ${state.counter >= 1 ? "yes" : "no"} (${state.counter})`,
@@ -371,6 +495,15 @@ class Playground {
       `Circle Drawer Circles:${state.circle_count}`,
       `Tab wrap forward/back: ${state.wrap_forward && state.wrap_backward ? "yes" : "no"}`,
       `Mouse selected TodoMVC: ${state.mouse_selected_todo ? "yes" : "no"}`,
+      ...(workspace ? [
+        `Source edit mode: ${this.sourceEditMode ? "on" : "off"}`,
+        `Working copy: ${workspace.workingPath}`,
+        `Diagnostics: ${workspace.diagnostics.length === 0 ? "clean" : workspace.diagnostics.join("; ")}`,
+        `Build: ${workspace.buildStatus}`,
+        `Rerun: ${workspace.runStatus}`,
+        `Diff lines: ${workspace.diff.length}`,
+        `External editor: ${workspace.editorStatus}`
+      ] : []),
       `log clean: ${state.log_clean ? "yes" : "no"}`,
       "terminal restored"
     ];
@@ -407,6 +540,78 @@ function box(title, lines, width, height) {
   }
   output.push(bottom);
   return output.slice(0, height);
+}
+
+function sourceLines(pg, limit) {
+  const workspace = pg.workspaceForActive();
+  const status = [
+    `${workspace.sourcePath}`,
+    `working: ${workspace.workingPath}`,
+    `edit: ${pg.sourceEditMode ? "on" : "off"} dirty:${workspace.dirty ? "yes" : "no"}`,
+    `diagnostics: ${workspace.diagnostics.length === 0 ? "clean" : workspace.diagnostics.join("; ")}`,
+    `build: ${workspace.buildStatus}`,
+    `rerun: ${workspace.runStatus}`,
+    "keys: e edit | v valid | ! invalid | r reload | b build | p rerun | d diff | o editor"
+  ];
+  const content = workspace.content.split(/\r?\n/).slice(0, Math.max(1, limit - status.length)).map((line, index) => {
+    const clean = line.trimEnd();
+    return `${String(index + 1).padStart(2, " ")} ${clean || " "}`;
+  });
+  const diff = workspace.diff.slice(0, 3).map((line) => `diff ${line}`);
+  return [...status, ...content, ...diff];
+}
+
+function projectForTab(tab) {
+  if (["counter", "interval", "cells", "pong", "arkanoid"].includes(tab.id)) return `examples/terminal/${tab.id}`;
+  return tab.source;
+}
+
+function applyValidEdit(content) {
+  if (content.includes("-- playground valid edit")) return content;
+  return `${content.replace(/\s+$/u, "")}\n-- playground valid edit\n`;
+}
+
+function applyInvalidEdit(content) {
+  if (content.includes("BROKEN_SOURCE_MARKER")) return content;
+  return `${content.replace(/\s+$/u, "")}\nBROKEN_SOURCE_MARKER\n`;
+}
+
+function diagnoseSource(content) {
+  const diagnostics = [];
+  if (content.includes("BROKEN_SOURCE_MARKER")) diagnostics.push("invalid source marker");
+  if (/\|>\s*LINK\b|:\s*LINK\b/.test(content)) diagnostics.push("legacy LINK spelling");
+  if (/\bSOURCE\b\s*(?:$|\n)/.test(content)) diagnostics.push("SOURCE used as value");
+  return diagnostics;
+}
+
+function writeWorkingSource(workspace) {
+  ensureParent(workspace.workingPath);
+  fs.writeFileSync(workspace.workingPath, workspace.content);
+}
+
+function sourceDiff(original, content) {
+  const before = original.split(/\r?\n/);
+  const after = content.split(/\r?\n/);
+  const lines = [];
+  const max = Math.max(before.length, after.length);
+  for (let i = 0; i < max; i += 1) {
+    if ((before[i] ?? "") !== (after[i] ?? "")) {
+      lines.push(`line ${i + 1}: -${before[i] ?? ""} +${after[i] ?? ""}`);
+    }
+    if (lines.length >= 8) break;
+  }
+  return lines;
+}
+
+function openExternalEditor(file) {
+  const editor = process.env.EDITOR || "vi";
+  if (process.env.BOONPONY_OPEN_EDITOR !== "1") return `${editor} prepared`;
+  try {
+    const result = spawnSync(editor, [file], { stdio: "inherit", timeout: 30000, env: process.env });
+    return result.status === 0 ? `${editor} completed` : `${editor} status ${result.status ?? "signal"}`;
+  } catch (error) {
+    return `${editor} unavailable`;
+  }
 }
 
 function previewLines(pg) {

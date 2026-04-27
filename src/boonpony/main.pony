@@ -602,7 +602,7 @@ actor Main
 
   fun _not_implemented(env: Env, command: String) =>
     env.err.print("error: command not implemented yet: " + command)
-    env.err.print("The current implementation is complete through Phase 11; continue with BOON_PONY_TUI_PLAN.md Phase 12.")
+    env.err.print("The current implementation is complete through Phase 12; continue with BOON_PONY_TUI_PLAN.md final gate work.")
     env.exitcode(1)
 
 primitive Help
@@ -640,8 +640,9 @@ primitive Help
     env.out.print("  boonpony tui --example pong")
     env.out.print("  boonpony tui --script tests/examples/terminal_playground_sequence.json")
     env.out.print("")
-    env.out.print("Phase 11 status:")
-    env.out.print("  The playground supports full-screen interactive mode, scripted replay, and PTY verification.")
+    env.out.print("Phase 12 status:")
+    env.out.print("  The playground supports full-screen mode, scripted replay, PTY verification, and source editing.")
+    env.out.print("  Source keys: e edit, v valid edit, ! invalid edit, r reload, b rebuild, p rerun, d diff, o editor.")
 
   fun play(env: Env) =>
     env.out.print("boonpony play - build and run a generated terminal app")

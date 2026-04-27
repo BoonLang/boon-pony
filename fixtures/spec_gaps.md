@@ -5,7 +5,7 @@ passing reports.
 
 ## Current Boundary
 
-- Phase 0 through Phase 11 gates are implemented and verified.
+- Phase 0 through Phase 12 gates are implemented and verified.
 - Phase 4 expected-file verification is an expected-contract runner: it parses
   every checked-in expected file, executes every scripted action into a
   deterministic report, and fails unsupported/malformed actions. It does not
@@ -20,8 +20,11 @@ passing reports.
 - The Phase 11 playground has a full-screen terminal host path, deterministic
   script/replay verification, terminal-grid projection, and tmux PTY full-tab
   smoke evidence.
-- Source editing, full final-gate verification, and broad benchmark matrix
-  remain later-phase work.
+- The Phase 12 source workflow supports `tui --example pong`, working-copy
+  editing, reload, rebuild, rerun, external-editor handoff, working diff, and
+  invalid-edit diagnostics under PTY verification.
+- Full final-gate verification and broad benchmark matrix remain later-phase
+  work.
 
 ## Implementation Debt
 
