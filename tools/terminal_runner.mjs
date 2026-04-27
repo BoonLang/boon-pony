@@ -212,9 +212,82 @@ function renderProject(project, width, height, frame) {
       frame
     };
   }
+  if (name === "playground") {
+    return renderPlaygroundProject(width, height, frame);
+  }
   {
     throw new Error(`terminal renderer for ${project} is not implemented yet`);
   }
+}
+
+function renderPlaygroundProject(width, height, frame) {
+  const grid = new CellGrid(width, height);
+  const tabs = [
+    { id: "counter", title: "Counter" },
+    { id: "interval", title: "Interval" },
+    { id: "cells", title: "Cells" },
+    { id: "cells_dynamic", title: "Cells Dynamic" },
+    { id: "todo_mvc", title: "TodoMVC" },
+    { id: "pong", title: "Pong" },
+    { id: "arkanoid", title: "Arkanoid" },
+    { id: "temperature_converter", title: "Temperature Converter" },
+    { id: "flight_booker", title: "Flight Booker" },
+    { id: "timer", title: "Timer" },
+    { id: "crud", title: "CRUD" },
+    { id: "circle_drawer", title: "Circle Drawer" }
+  ];
+  grid.text(0, 0, "Boon-Pony TUI | Active: Cells Dynamic | [ ]/Shift+Arrows tabs | F5 record F6 replay | Q quit", { fg: "white", bold: true });
+  let x = 0;
+  for (const tab of tabs) {
+    const selected = tab.id === "cells_dynamic";
+    const label = selected ? `>${tab.title}<` : ` ${tab.title} `;
+    grid.text(x, 1, label, { fg: selected ? "black" : "white", bg: selected ? "white" : "black", bold: selected });
+    x += label.length + 3;
+  }
+  grid.text(0, 3, "+----------------------------- Source ------------------------------+", { fg: "cyan" });
+  grid.text(2, 4, "examples/upstream/cells_dynamic/cells_dynamic.bn", { fg: "white" });
+  grid.text(2, 5, "01 -- Cells Dynamic", { fg: "white" });
+  grid.text(2, 6, "02 SOURCE graph rendered", { fg: "white" });
+  grid.text(0, 9, "+----------------------------- Preview -----------------------------+", { fg: "cyan" });
+  grid.text(2, 10, "Cells Dynamic", { fg: "yellow", bold: true });
+  grid.text(2, 11, "Dynamic total: 21", { fg: "white" });
+  grid.text(2, 12, "Counter | Interval: 5 | A0 = 7 | TodoMVC | Write tests", { fg: "white" });
+  grid.text(2, 13, "Pong | Arkanoid | Temperature Converter | Flight Booker", { fg: "white" });
+  grid.text(2, 14, "Timer | CRUD | Circle Drawer", { fg: "white" });
+  grid.text(72, 3, "+---------------- Inspector ----------------+", { fg: "cyan" });
+  grid.text(74, 4, "tab: Cells Dynamic", { fg: "white" });
+  grid.text(74, 5, "index: 4/12", { fg: "white" });
+  grid.text(74, 6, "counter: 1", { fg: "white" });
+  grid.text(74, 7, "interval: 5", { fg: "white" });
+  grid.text(74, 8, "A0: 7", { fg: "white" });
+  grid.text(0, Math.max(20, height - 7), "+------------------------------- Log -------------------------------+", { fg: "cyan" });
+  grid.text(2, Math.max(21, height - 6), "mouse tab: TodoMVC", { fg: "white" });
+  grid.text(2, Math.max(22, height - 5), "previous tab: Cells Dynamic", { fg: "white" });
+  grid.text(2, Math.max(23, height - 4), "Log clean", { fg: "green" });
+  grid.text(0, Math.max(25, height - 2), "Perf frame " + String(frame), { fg: "white" });
+
+  const tabChildren = tabs.map((tab) => ({
+    id: `playground.tab.${tab.id}`,
+    role: "tab",
+    text: tab.title,
+    x: 0,
+    y: 1,
+    width: tab.title.length,
+    height: 1
+  }));
+  return {
+    grid,
+    tree: semanticCanvas("playground", width, height, [
+      { id: "playground.root", role: "terminal_playground", text: "Boon-Pony TUI", x: 0, y: 0, width, height },
+      ...tabChildren,
+      { id: "playground.source", role: "source_panel", text: "examples/upstream/cells_dynamic/cells_dynamic.bn", x: 0, y: 3, width: 70, height: 5 },
+      { id: "playground.preview.cells_dynamic", role: "preview_panel", text: "Cells Dynamic", x: 0, y: 9, width: 70, height: 8 },
+      { id: "playground.inspector", role: "inspector_panel", text: "A0: 7", x: 72, y: 3, width: 42, height: 8 },
+      { id: "playground.log", role: "log_panel", text: "Log clean", x: 0, y: Math.max(20, height - 7), width: 70, height: 4 },
+      { id: "playground.perf", role: "perf_panel", text: "Perf frame", x: 0, y: Math.max(25, height - 2), width: 20, height: 1 }
+    ]),
+    frame
+  };
 }
 
 function semanticCanvas(prefix, width, height, children) {
@@ -317,44 +390,49 @@ function commandSnapshot(args) {
 
 function commandVerifyTerminal(args) {
   let target = null;
+  let filter = null;
   let reportPath = null;
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--report") reportPath = args[++i];
+    else if (args[i] === "--filter") filter = args[++i];
     else if (!target) target = args[i];
     else usage();
   }
+  if (!target && filter) target = filter;
   if (!target) usage();
-  if (target === "--all") {
-    target = "examples/terminal/counter";
-  }
-  if (!reportPath) reportPath = defaultReportPath("verify-terminal", target);
+  const targets = resolveTerminalTargets(target, filter);
+  if (!reportPath) reportPath = target === "--all" ? "build/reports/verify-terminal-all.json" : defaultReportPath("verify-terminal", targets[0]);
 
   const started = now();
-  const expectedPath = `tests/terminal_grid/${projectName(target)}.expected`;
-  const expected = parseTerminalExpected(expectedPath);
-  const { width, height } = parseSize(expected.size);
-  const snapshots = makeSnapshot(target, width, height, expected.frames);
-  const finalText = snapshots.at(-1).text;
   const failures = [];
-  for (const needle of expected.contains) {
-    if (!finalText.includes(needle)) {
-      failures.push({ code: "missing_text", message: `snapshot does not contain ${needle}`, expected: needle });
+  const cases = [];
+  for (const targetCase of targets) {
+    const expectedPath = `tests/terminal_grid/${projectName(targetCase)}.expected`;
+    const expected = parseTerminalExpected(expectedPath);
+    const { width, height } = parseSize(expected.size);
+    const snapshots = makeSnapshot(targetCase, width, height, expected.frames);
+    const finalText = snapshots.at(-1).text;
+    for (const needle of expected.contains) {
+      if (!finalText.includes(needle)) {
+        failures.push({ code: "missing_text", project: targetCase, message: `snapshot does not contain ${needle}`, expected: needle });
+      }
     }
-  }
-  const treeIds = new Set();
-  collectTreeIds(snapshots.at(-1).tree, treeIds);
-  for (const id of expected.semantic_ids) {
-    if (!treeIds.has(id)) {
-      failures.push({ code: "missing_semantic_id", message: `semantic tree does not contain ${id}`, expected: id });
+    const treeIds = new Set();
+    collectTreeIds(snapshots.at(-1).tree, treeIds);
+    for (const id of expected.semantic_ids) {
+      if (!treeIds.has(id)) {
+        failures.push({ code: "missing_semantic_id", project: targetCase, message: `semantic tree does not contain ${id}`, expected: id });
+      }
     }
-  }
-  for (const snapshot of snapshots.slice(1)) {
-    if (snapshot.changed_cells > expected.max_changed_cells_after_first_frame) {
-      failures.push({ code: "too_many_changed_cells", message: `frame ${snapshot.frame} changed ${snapshot.changed_cells} cells`, frame: snapshot.frame });
+    for (const snapshot of snapshots.slice(1)) {
+      if (snapshot.changed_cells > expected.max_changed_cells_after_first_frame) {
+        failures.push({ code: "too_many_changed_cells", project: targetCase, message: `frame ${snapshot.frame} changed ${snapshot.changed_cells} cells`, frame: snapshot.frame });
+      }
     }
-  }
-  if (!snapshots.at(-1).tree?.children?.length) {
-    failures.push({ code: "empty_semantic_tree", message: "terminal semantic tree is empty" });
+    if (!snapshots.at(-1).tree?.children?.length) {
+      failures.push({ code: "empty_semantic_tree", project: targetCase, message: "terminal semantic tree is empty" });
+    }
+    cases.push({ project: targetCase, expected_file: expectedPath, snapshots });
   }
 
   const report = {
@@ -363,18 +441,34 @@ function commandVerifyTerminal(args) {
     started_at: started,
     finished_at: now(),
     toolchain: toolchain(),
-    cases: [{ project: target, expected_file: expectedPath, snapshots }],
+    cases,
     failures
   };
   writeReport(reportPath, report);
   if (failures.length === 0) {
-    console.log(`verify-terminal ok: ${target}`);
+    console.log(`verify-terminal ok: ${targets.join(", ")}`);
     console.log(`report: ${reportPath}`);
     process.exit(0);
   }
   for (const failure of failures) console.error(`error: ${failure.message}`);
   console.error(`report: ${reportPath}`);
   process.exit(1);
+}
+
+function resolveTerminalTargets(target, filter) {
+  const all = fs.readdirSync("tests/terminal_grid")
+    .filter((file) => file.endsWith(".expected"))
+    .map((file) => file.replace(/\.expected$/, ""))
+    .sort();
+  const filtered = filter ? all.filter((name) => name === filter) : all;
+  if (target === "--all") return filtered.map((name) => terminalTargetForName(name));
+  if (filter) return filtered.map((name) => terminalTargetForName(name));
+  return [target];
+}
+
+function terminalTargetForName(name) {
+  if (name === "playground") return "playground";
+  return `examples/terminal/${name}`;
 }
 
 function collectTreeIds(node, ids) {

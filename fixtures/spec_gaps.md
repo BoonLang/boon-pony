@@ -5,7 +5,7 @@ passing reports.
 
 ## Current Boundary
 
-- Phase 0 through Phase 10 gates are implemented and verified.
+- Phase 0 through Phase 11 gates are implemented and verified.
 - Phase 4 expected-file verification is an expected-contract runner: it parses
   every checked-in expected file, executes every scripted action into a
   deterministic report, and fails unsupported/malformed actions. It does not
@@ -17,8 +17,11 @@ passing reports.
 - Phase 8 terminal canvas smoke currently covers interval and cells.
 - Pong and Arkanoid have generated Pony direct/protocol mode, headless terminal
   verification, frame benchmarks, and tmux PTY smoke evidence.
-- The full playground, source editing, full final-gate verification, and broad
-  benchmark matrix remain later-phase work.
+- The Phase 11 playground has a full-screen terminal host path, deterministic
+  script/replay verification, terminal-grid projection, and tmux PTY full-tab
+  smoke evidence.
+- Source editing, full final-gate verification, and broad benchmark matrix
+  remain later-phase work.
 
 ## Implementation Debt
 

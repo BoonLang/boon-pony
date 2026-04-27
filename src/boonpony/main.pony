@@ -35,10 +35,53 @@ actor Main
   fun _command_tui(env: Env) =>
     if _has_help(env) then
       Help.tui(env)
-    elseif _has_arg(env, "--keyboard-test") then
-      _run_tool(env, "node tools/terminal_safety.mjs keyboard-test")
     else
-      _not_implemented(env, "tui")
+      var command = "node tools/playground_runner.mjs run"
+      var script_mode = false
+      var keyboard_mode = false
+      var index: USize = 2
+      while index < env.args.size() do
+        try
+          let arg = env.args(index)?
+          if arg == "--keyboard-test" then
+            command = "node tools/terminal_safety.mjs keyboard-test"
+            keyboard_mode = true
+            index = index + 1
+          elseif keyboard_mode then
+            env.err.print("error: --keyboard-test cannot be combined with other tui options")
+            Help.tui(env)
+            env.exitcode(2)
+            return
+          elseif arg == "--script" then
+            command = "node tools/playground_runner.mjs script " + env.args(index + 1)?
+            script_mode = true
+            index = index + 2
+          elseif arg == "--example" then
+            if script_mode then
+              env.err.print("error: --example cannot be combined with --script")
+              Help.tui(env)
+              env.exitcode(2)
+              return
+            end
+            command = command + " --example " + env.args(index + 1)?
+            index = index + 2
+          elseif arg == "--report" then
+            command = command + " --report " + env.args(index + 1)?
+            index = index + 2
+          else
+            env.err.print("error: unknown tui option: " + arg)
+            Help.tui(env)
+            env.exitcode(2)
+            return
+          end
+        else
+          env.err.print("error: tui option is missing a value")
+          Help.tui(env)
+          env.exitcode(2)
+          return
+        end
+      end
+      _run_tool(env, consume command)
     end
 
   fun _command_play(env: Env) =>
@@ -419,6 +462,7 @@ actor Main
     end
 
     var target: String = ""
+    var filter: String = ""
     var report: String = ""
     var index: USize = 2
     while index < env.args.size() do
@@ -426,6 +470,9 @@ actor Main
         let arg = env.args(index)?
         if arg == "--report" then
           report = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--filter" then
+          filter = env.args(index + 1)?
           index = index + 2
         elseif target == "" then
           target = arg
@@ -444,14 +491,20 @@ actor Main
       end
     end
 
-    if target == "" then
-      env.err.print("error: verify-terminal requires an example project or --all")
+    if (target == "") and (filter == "") then
+      env.err.print("error: verify-terminal requires an example project, --all, or --filter <name>")
       Help.verify_terminal(env)
       env.exitcode(2)
       return
     end
 
-    var command = "node tools/terminal_runner.mjs verify-terminal " + target
+    var command = "node tools/terminal_runner.mjs verify-terminal"
+    if target != "" then
+      command = command + " " + target
+    end
+    if filter != "" then
+      command = command + " --filter " + filter
+    end
     if report != "" then
       command = command + " --report " + report
     end
@@ -549,7 +602,7 @@ actor Main
 
   fun _not_implemented(env: Env, command: String) =>
     env.err.print("error: command not implemented yet: " + command)
-    env.err.print("The current implementation is complete through Phase 10; continue with BOON_PONY_TUI_PLAN.md Phase 11.")
+    env.err.print("The current implementation is complete through Phase 11; continue with BOON_PONY_TUI_PLAN.md Phase 12.")
     env.exitcode(1)
 
 primitive Help
@@ -570,7 +623,7 @@ primitive Help
     env.out.print("  boonpony build <project>")
     env.out.print("  boonpony protocol-smoke <project>")
     env.out.print("  boonpony verify <project-or---all>")
-    env.out.print("  boonpony verify-terminal <project-or---all>")
+    env.out.print("  boonpony verify-terminal <project-or---all> [--filter playground]")
     env.out.print("  boonpony verify-terminal-safety --pty")
     env.out.print("  boonpony snapshot <project> --size 80x24 --frames 120")
     env.out.print("  boonpony bench <project-or---all>")
@@ -587,8 +640,8 @@ primitive Help
     env.out.print("  boonpony tui --example pong")
     env.out.print("  boonpony tui --script tests/examples/terminal_playground_sequence.json")
     env.out.print("")
-    env.out.print("Phase 0 status:")
-    env.out.print("  Help is available; the interactive TUI is implemented in later phases.")
+    env.out.print("Phase 11 status:")
+    env.out.print("  The playground supports full-screen interactive mode, scripted replay, and PTY verification.")
 
   fun play(env: Env) =>
     env.out.print("boonpony play - build and run a generated terminal app")
@@ -670,6 +723,8 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony verify-terminal examples/terminal/counter")
+    env.out.print("  boonpony verify-terminal --filter playground")
+    env.out.print("  boonpony verify-terminal --all --report build/reports/verify-terminal.json")
 
   fun verify_terminal_safety(env: Env) =>
     env.out.print("boonpony verify-terminal-safety - verify raw input and terminal restoration")

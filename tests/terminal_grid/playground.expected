@@ -1,0 +1,43 @@
+size = "120x36"
+frames = 8
+max_changed_cells_after_first_frame = 1500
+
+contains = [
+  "Boon-Pony TUI",
+  "Active: Cells Dynamic",
+  "Counter",
+  "Interval: 5",
+  "A0 = 7",
+  "Cells Dynamic",
+  "TodoMVC",
+  "Write tests",
+  "Pong",
+  "Arkanoid",
+  "Temperature Converter",
+  "Flight Booker",
+  "Timer",
+  "CRUD",
+  "Circle Drawer",
+  "Log clean"
+]
+
+semantic_ids = [
+  "playground.root",
+  "playground.tab.counter",
+  "playground.tab.interval",
+  "playground.tab.cells",
+  "playground.tab.cells_dynamic",
+  "playground.tab.todo_mvc",
+  "playground.tab.pong",
+  "playground.tab.arkanoid",
+  "playground.tab.temperature_converter",
+  "playground.tab.flight_booker",
+  "playground.tab.timer",
+  "playground.tab.crud",
+  "playground.tab.circle_drawer",
+  "playground.source",
+  "playground.preview.cells_dynamic",
+  "playground.inspector",
+  "playground.log",
+  "playground.perf"
+]
