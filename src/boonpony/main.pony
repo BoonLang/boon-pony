@@ -20,6 +20,7 @@ actor Main
       | "verify" => _command_verify(env)
       | "verify-terminal" => _command_verify_terminal(env)
       | "verify-terminal-safety" => _command_verify_terminal_safety(env)
+      | "verify-pty" => _command_verify_pty(env)
       | "snapshot" => _command_snapshot(env)
       | "protocol-smoke" => _command_protocol_smoke(env)
       | "bench" => _command_bench(env)
@@ -567,6 +568,36 @@ actor Main
     end
     NativeSafety.verify_command(env, pty, report)
 
+  fun _command_verify_pty(env: Env) =>
+    if _has_help(env) then
+      Help.verify_pty(env)
+      return
+    end
+    var report: String = ""
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--report" then
+          report = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--all" then
+          index = index + 1
+        else
+          env.err.print("error: unknown verify-pty option: " + arg)
+          Help.verify_pty(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: verify-pty option is missing a value")
+        Help.verify_pty(env)
+        env.exitcode(2)
+        return
+      end
+    end
+    NativePty.verify_command(env, report)
+
   fun _command_bench(env: Env) =>
     if _has_help(env) then
       Help.bench(env)
@@ -634,6 +665,7 @@ primitive Help
     env.out.print("  boonpony verify <project-or---all>")
     env.out.print("  boonpony verify-terminal <project-or---all> [--filter playground]")
     env.out.print("  boonpony verify-terminal-safety --pty")
+    env.out.print("  boonpony verify-pty --all")
     env.out.print("  boonpony snapshot <project> --size 80x24 --frames 120")
     env.out.print("  boonpony bench <project-or---all>")
     env.out.print("")
@@ -741,6 +773,12 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony verify-terminal-safety --pty")
+
+  fun verify_pty(env: Env) =>
+    env.out.print("boonpony verify-pty - run real PTY smoke proofs")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony verify-pty --all --report build/reports/verify-pty.json")
 
   fun bench(env: Env) =>
     env.out.print("boonpony bench - run deterministic runtime benchmarks")
