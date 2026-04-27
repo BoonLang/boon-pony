@@ -1,0 +1,28 @@
+[test]
+category = "terminal"
+description = "Generated Arkanoid terminal app"
+
+[output]
+match = "contains"
+text = "Arkanoid"
+
+[[sequence]]
+description = "Initial Arkanoid canvas has core semantic nodes"
+actions = [
+  ["assert_node_exists", "arkanoid.ball"],
+  ["assert_node_exists", "arkanoid.paddle"],
+  ["assert_node_exists", "arkanoid.brick.0.0"],
+  ["assert_node_exists", "arkanoid.score"],
+  ["assert_node_exists", "arkanoid.status"]
+]
+expect = "Playing"
+
+[[sequence]]
+description = "A brick hit increments score"
+actions = [
+  ["press_key", "Space"],
+  ["wait_frames", 20],
+  ["assert_score", "Score: 1"],
+  ["assert_status", "Brick removed"]
+]
+expect = "Score: 1"

@@ -1,0 +1,25 @@
+sources: [
+  keyboard: [event: [key_down: SOURCE]]
+  frame: [event: [tick: SOURCE]]
+]
+
+state: [
+  score: 0
+  status: Playing
+  paddle_x: 36
+  ball_x: 40
+  ball_y: 20
+  bricks_left: 24
+]
+
+document: Terminal/canvas(width: 80, height: 28, items: LIST {
+  Canvas/text(x: 0, y: 0, text: TEXT { Score: {state.score} })
+  Canvas/text(x: 30, y: 0, text: TEXT { {state.status} })
+  Canvas/rect(x: state.paddle_x, y: 26, width: 8, height: 1, glyph: TEXT { ▔ })
+  Canvas/text(x: state.ball_x, y: state.ball_y, text: TEXT { ● })
+  Canvas/group(items: LIST {
+    Canvas/rect(x: 4, y: 3, width: 8, height: 1, glyph: TEXT { █ })
+    Canvas/rect(x: 14, y: 3, width: 8, height: 1, glyph: TEXT { █ })
+    Canvas/rect(x: 24, y: 3, width: 8, height: 1, glyph: TEXT { █ })
+  })
+})

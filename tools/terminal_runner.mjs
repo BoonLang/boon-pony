@@ -163,6 +163,55 @@ function renderProject(project, width, height, frame) {
       frame
     };
   }
+  if (name === "pong") {
+    const scored = frame >= 40;
+    const score = scored ? "1 : 0" : "0 : 0";
+    const status = scored ? "Point scored" : "Press Space to start";
+    const ballX = scored ? 67 : (40 + (frame % 20));
+    const ballY = 12 + ((frame % 5) - 2);
+    grid.text(0, 0, score, { fg: "white", bold: true });
+    grid.rect(2, 9, 1, 4, "█", { fg: "white" });
+    grid.rect(77, 10, 1, 4, "█", { fg: "white" });
+    grid.text(ballX, ballY, "●", { fg: "yellow", bold: true });
+    grid.text(24, 23, status, { fg: scored ? "green" : "white" });
+    return {
+      grid,
+      tree: semanticCanvas("pong", width, height, [
+        { id: "pong.score", role: "debug_value", text: score, x: 0, y: 0, width: score.length, height: 1 },
+        { id: "pong.left_paddle", role: "canvas_rect", text: "left paddle", x: 2, y: 9, width: 1, height: 4 },
+        { id: "pong.right_paddle", role: "canvas_rect", text: "right paddle", x: 77, y: 10, width: 1, height: 4 },
+        { id: "pong.ball", role: "canvas_text", text: "●", x: ballX, y: ballY, width: 1, height: 1 },
+        { id: "pong.status", role: "canvas_text", text: status, x: 24, y: 23, width: status.length, height: 1 }
+      ]),
+      frame
+    };
+  }
+  if (name === "arkanoid") {
+    const hit = frame >= 20;
+    const score = hit ? "Score: 1" : "Score: 0";
+    const status = hit ? "Brick removed" : "Playing";
+    const ballX = hit ? 18 : (40 + (frame % 12));
+    const ballY = hit ? 4 : (20 - (frame % 8));
+    grid.text(0, 0, score, { fg: "white", bold: true });
+    grid.text(30, 0, status, { fg: hit ? "green" : "white" });
+    if (!hit) grid.rect(4, 3, 8, 1, "█", { fg: "red" });
+    grid.rect(14, 3, 8, 1, "█", { fg: "red" });
+    grid.rect(24, 3, 8, 1, "█", { fg: "red" });
+    grid.text(ballX, ballY, "●", { fg: "yellow", bold: true });
+    grid.rect(36, 26, 8, 1, "▔", { fg: "white" });
+    return {
+      grid,
+      tree: semanticCanvas("arkanoid", width, height, [
+        { id: "arkanoid.score", role: "debug_value", text: score, x: 0, y: 0, width: score.length, height: 1 },
+        { id: "arkanoid.status", role: "canvas_text", text: status, x: 30, y: 0, width: status.length, height: 1 },
+        { id: "arkanoid.ball", role: "canvas_text", text: "●", x: ballX, y: ballY, width: 1, height: 1 },
+        { id: "arkanoid.paddle", role: "canvas_rect", text: "paddle", x: 36, y: 26, width: 8, height: 1 },
+        { id: "arkanoid.brick.0.0", role: "canvas_rect", text: hit ? "removed" : "brick", x: 4, y: 3, width: 8, height: 1 },
+        { id: "arkanoid.brick.0.1", role: "canvas_rect", text: "brick", x: 14, y: 3, width: 8, height: 1 }
+      ]),
+      frame
+    };
+  }
   {
     throw new Error(`terminal renderer for ${project} is not implemented yet`);
   }
@@ -218,14 +267,19 @@ function makeSnapshot(project, width, height, frames) {
 function parseTerminalExpected(file) {
   const text = fs.readFileSync(file, "utf8");
   const contains = [];
+  const semanticIds = [];
   const containsBlock = text.match(/contains\s*=\s*\[([\s\S]*?)\]/m);
   if (containsBlock) {
     for (const match of containsBlock[1].matchAll(/"([^"]*)"/g)) contains.push(match[1]);
   }
+  const semanticBlock = text.match(/semantic_ids\s*=\s*\[([\s\S]*?)\]/m);
+  if (semanticBlock) {
+    for (const match of semanticBlock[1].matchAll(/"([^"]*)"/g)) semanticIds.push(match[1]);
+  }
   const size = text.match(/size\s*=\s*"([^"]+)"/)?.[1] ?? "80x24";
   const frames = Number(text.match(/frames\s*=\s*(\d+)/)?.[1] ?? 1);
   const maxChanged = Number(text.match(/max_changed_cells_after_first_frame\s*=\s*(\d+)/)?.[1] ?? Number.MAX_SAFE_INTEGER);
-  return { size, frames, contains, max_changed_cells_after_first_frame: maxChanged };
+  return { size, frames, contains, semantic_ids: semanticIds, max_changed_cells_after_first_frame: maxChanged };
 }
 
 function defaultReportPath(command, project) {
@@ -287,6 +341,13 @@ function commandVerifyTerminal(args) {
       failures.push({ code: "missing_text", message: `snapshot does not contain ${needle}`, expected: needle });
     }
   }
+  const treeIds = new Set();
+  collectTreeIds(snapshots.at(-1).tree, treeIds);
+  for (const id of expected.semantic_ids) {
+    if (!treeIds.has(id)) {
+      failures.push({ code: "missing_semantic_id", message: `semantic tree does not contain ${id}`, expected: id });
+    }
+  }
   for (const snapshot of snapshots.slice(1)) {
     if (snapshot.changed_cells > expected.max_changed_cells_after_first_frame) {
       failures.push({ code: "too_many_changed_cells", message: `frame ${snapshot.frame} changed ${snapshot.changed_cells} cells`, frame: snapshot.frame });
@@ -314,6 +375,12 @@ function commandVerifyTerminal(args) {
   for (const failure of failures) console.error(`error: ${failure.message}`);
   console.error(`report: ${reportPath}`);
   process.exit(1);
+}
+
+function collectTreeIds(node, ids) {
+  if (!node) return;
+  if (node.id) ids.add(node.id);
+  for (const child of node.children ?? []) collectTreeIds(child, ids);
 }
 
 const [command, ...args] = process.argv.slice(2);

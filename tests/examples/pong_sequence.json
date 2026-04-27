@@ -1,0 +1,22 @@
+{
+  "example": "pong",
+  "terminal_size": [80, 24],
+  "events": [
+    {"frame": 1, "type": "key", "key": "Space"},
+    {"frame": 10, "type": "key", "key": "W"},
+    {"frame": 11, "type": "key", "key": "W"},
+    {"frame": 40, "type": "key", "key": "ArrowUp"},
+    {"frame": 60, "type": "frame"}
+  ],
+  "expect": {
+    "score": "1 : 0",
+    "status": "Point scored",
+    "semantic_ids": [
+      "pong.ball",
+      "pong.left_paddle",
+      "pong.right_paddle",
+      "pong.score",
+      "pong.status"
+    ]
+  }
+}

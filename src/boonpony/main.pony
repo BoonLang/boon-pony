@@ -22,7 +22,7 @@ actor Main
       | "verify-terminal-safety" => _command_verify_terminal_safety(env)
       | "snapshot" => _command_snapshot(env)
       | "protocol-smoke" => _command_protocol_smoke(env)
-      | "bench" => _not_implemented(env, "bench")
+      | "bench" => _command_bench(env)
       else
         env.err.print("error: unknown command: " + command)
         Help.root(env)
@@ -47,7 +47,28 @@ actor Main
     else
       try
         let project = env.args(2)?
-        _not_implemented(env, "play " + project)
+        var command = "node tools/play_runner.mjs play " + project
+        var index: USize = 3
+        while index < env.args.size() do
+          try
+            let arg = env.args(index)?
+            if arg == "--report" then
+              command = command + " --report " + env.args(index + 1)?
+              index = index + 2
+            else
+              env.err.print("error: unknown play option: " + arg)
+              Help.play(env)
+              env.exitcode(2)
+              return
+            end
+          else
+            env.err.print("error: play option is missing a value")
+            Help.play(env)
+            env.exitcode(2)
+            return
+          end
+        end
+        _run_tool(env, consume command)
       else
         env.err.print("error: play requires a project path")
         Help.play(env)
@@ -468,6 +489,29 @@ actor Main
     end
     _run_tool(env, consume command)
 
+  fun _command_bench(env: Env) =>
+    if _has_help(env) then
+      Help.bench(env)
+      return
+    end
+
+    if env.args.size() < 3 then
+      env.err.print("error: bench requires a project or --all")
+      Help.bench(env)
+      env.exitcode(2)
+      return
+    end
+
+    var command = "node tools/bench_runner.mjs bench"
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        command = command + " " + env.args(index)?
+      end
+      index = index + 1
+    end
+    _run_tool(env, consume command)
+
   fun _has_help(env: Env): Bool =>
     var index: USize = 2
     while index < env.args.size() do
@@ -505,7 +549,7 @@ actor Main
 
   fun _not_implemented(env: Env, command: String) =>
     env.err.print("error: command not implemented yet: " + command)
-    env.err.print("The current implementation is complete through Phase 8; continue with BOON_PONY_TUI_PLAN.md Phase 9.")
+    env.err.print("The current implementation is complete through Phase 10; continue with BOON_PONY_TUI_PLAN.md Phase 11.")
     env.exitcode(1)
 
 primitive Help
@@ -552,9 +596,6 @@ primitive Help
     env.out.print("Usage:")
     env.out.print("  boonpony play examples/terminal/pong")
     env.out.print("  boonpony play examples/terminal/arkanoid")
-    env.out.print("")
-    env.out.print("Phase 0 status:")
-    env.out.print("  Help is available; generated direct-play apps are implemented in later phases.")
 
   fun manifest(env: Env) =>
     env.out.print("boonpony manifest - inspect generated corpus manifests")
@@ -635,3 +676,9 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony verify-terminal-safety --pty")
+
+  fun bench(env: Env) =>
+    env.out.print("boonpony bench - run deterministic runtime benchmarks")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony bench examples/terminal/pong --scenario frame --frames 10000")

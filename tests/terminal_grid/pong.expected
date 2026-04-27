@@ -1,0 +1,14 @@
+size = "80x24"
+frames = 120
+contains = [
+  "1 : 0",
+  "Point scored"
+]
+semantic_ids = [
+  "pong.ball",
+  "pong.left_paddle",
+  "pong.right_paddle",
+  "pong.score",
+  "pong.status"
+]
+max_changed_cells_after_first_frame = 32

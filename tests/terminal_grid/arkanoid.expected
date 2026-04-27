@@ -1,0 +1,14 @@
+size = "80x28"
+frames = 80
+contains = [
+  "Score: 1",
+  "Brick removed"
+]
+semantic_ids = [
+  "arkanoid.ball",
+  "arkanoid.paddle",
+  "arkanoid.brick.0.0",
+  "arkanoid.score",
+  "arkanoid.status"
+]
+max_changed_cells_after_first_frame = 40

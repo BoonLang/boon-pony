@@ -1,0 +1,29 @@
+[test]
+category = "terminal"
+description = "Generated Pong terminal app"
+
+[output]
+match = "contains"
+text = "Pong"
+
+[[sequence]]
+description = "Initial Pong canvas contains score and status"
+actions = [
+  ["assert_canvas_contains", "0 : 0"],
+  ["assert_node_exists", "pong.ball"],
+  ["assert_node_exists", "pong.left_paddle"],
+  ["assert_node_exists", "pong.right_paddle"],
+  ["assert_node_exists", "pong.score"],
+  ["assert_node_exists", "pong.status"]
+]
+expect = "Press Space to start"
+
+[[sequence]]
+description = "Headless script reaches one scored point"
+actions = [
+  ["press_key", "Space"],
+  ["wait_frames", 40],
+  ["assert_score", "1 : 0"],
+  ["assert_status", "Point scored"]
+]
+expect = "1 : 0"

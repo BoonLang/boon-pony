@@ -1,0 +1,21 @@
+{
+  "example": "arkanoid",
+  "terminal_size": [80, 28],
+  "events": [
+    {"frame": 1, "type": "key", "key": "Space"},
+    {"frame": 20, "type": "frame"},
+    {"frame": 40, "type": "key", "key": "L"},
+    {"frame": 41, "type": "key", "key": "Space"}
+  ],
+  "expect": {
+    "score": "Score: 1",
+    "status": "Brick removed",
+    "semantic_ids": [
+      "arkanoid.ball",
+      "arkanoid.paddle",
+      "arkanoid.brick.0.0",
+      "arkanoid.score",
+      "arkanoid.status"
+    ]
+  }
+}
