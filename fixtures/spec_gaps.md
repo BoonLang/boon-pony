@@ -12,7 +12,7 @@ passing reports.
   yet execute generated app runtime state; later terminal/runtime gates must
   provide that evidence.
 - Phase 5 terminal verification is headless-grid based.
-- Phase 6 raw-input safety is PTY-verified through a tmux harness.
+- Phase 6 raw-input safety is PTY-verified through a native Pony tmux harness.
 - Phase 7 codegen/runtime/protocol currently covers the counter, Pong, and
   Arkanoid terminal targets.
 - Phase 8 terminal canvas smoke currently covers interval and cells.
@@ -36,6 +36,8 @@ passing reports.
   tooling.
 - Headless terminal snapshots now run in native Pony instead of repo-local Node
   tooling.
+- Raw keyboard input safety and PTY terminal restoration verification now run
+  in native Pony instead of repo-local Node tooling.
 - Benchmark matrix and benchmark report generation now run in native Pony
   instead of repo-local Node tooling.
 - Scripted playground replay for `tui --script` now runs in native Pony instead
@@ -46,9 +48,9 @@ passing reports.
 
 ## Implementation Debt
 
-- Interactive playground/source-edit orchestration, upstream import, raw
-  keyboard safety, and PTY smoke verification currently run through repo-local
-  Node tooling launched by the Pony CLI.
+- Interactive playground/source-edit orchestration, upstream import, and PTY
+  smoke verification currently run through repo-local Node tooling launched by
+  the Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.

@@ -45,7 +45,6 @@ actor Main
         try
           let arg = env.args(index)?
           if arg == "--keyboard-test" then
-            command = "node tools/terminal_safety.mjs keyboard-test"
             keyboard_mode = true
             index = index + 1
           elseif keyboard_mode then
@@ -87,6 +86,8 @@ actor Main
           report = "build/reports/playground-script.json"
         end
         NativeBoon.tui_script_command(env, script, report)
+      elseif keyboard_mode then
+        NativeSafety.keyboard_test_command(env)
       else
         _run_tool(env, consume command)
       end
@@ -540,16 +541,17 @@ actor Main
       return
     end
 
-    var command = "node tools/terminal_safety.mjs verify-terminal-safety"
+    var pty = false
+    var report: String = ""
     var index: USize = 2
     while index < env.args.size() do
       try
         let arg = env.args(index)?
         if arg == "--pty" then
-          command = command + " --pty"
+          pty = true
           index = index + 1
         elseif arg == "--report" then
-          command = command + " --report " + env.args(index + 1)?
+          report = env.args(index + 1)?
           index = index + 2
         else
           env.err.print("error: unknown verify-terminal-safety option: " + arg)
@@ -564,7 +566,7 @@ actor Main
         return
       end
     end
-    _run_tool(env, consume command)
+    NativeSafety.verify_command(env, pty, report)
 
   fun _command_bench(env: Env) =>
     if _has_help(env) then
