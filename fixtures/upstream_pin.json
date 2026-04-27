@@ -1,0 +1,9 @@
+{
+  "repo": "https://github.com/BoonLang/boon",
+  "commit": "c924d9f7d7e1c156604c9377e0487db48c278353",
+  "source_root": "playground/frontend/src/examples",
+  "imported_root": "examples/upstream",
+  "override_root": "examples/upstream_overrides",
+  "tree_hash": "295c68d7c6bfc74c96f67a4d8b182615d7d47ad5a0dcace7e5d52cb0549609df",
+  "tree_hash_command": "node tools/import_upstream.mjs internal tree hash over examples/upstream and examples/upstream_overrides"
+}

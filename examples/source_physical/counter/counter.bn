@@ -1,0 +1,15 @@
+sources: [
+  increment_button: [event: [press: SOURCE]]
+]
+
+counter:
+  LATEST {
+    0
+    sources.increment_button.event.press |> THEN { 1 }
+  }
+  |> Math/sum()
+
+document: Terminal/canvas(width: 80, height: 24, items: LIST {
+  Canvas/text(x: 2, y: 2, text: TEXT { Counter: {counter} })
+  Canvas/text(x: 2, y: 4, text: TEXT { Press + })
+})

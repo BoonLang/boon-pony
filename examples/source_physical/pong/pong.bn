@@ -1,0 +1,24 @@
+sources: [
+  keyboard: [event: [key_down: SOURCE]]
+  frame: [event: [tick: SOURCE]]
+]
+
+state: [
+  left_y: 10
+  right_y: 10
+  ball_x: 40
+  ball_y: 12
+  ball_dx: 1
+  ball_dy: 1
+  left_score: 0
+  right_score: 0
+  status: TEXT { Press Space to start }
+]
+
+document: Terminal/canvas(width: 80, height: 24, items: LIST {
+  Canvas/text(x: 0, y: 0, text: TEXT { {state.left_score} : {state.right_score} })
+  Canvas/text(x: state.ball_x, y: state.ball_y, text: TEXT { ● })
+  Canvas/rect(x: 2, y: state.left_y, width: 1, height: 4, glyph: TEXT { █ })
+  Canvas/rect(x: 77, y: state.right_y, width: 1, height: 4, glyph: TEXT { █ })
+  Canvas/text(x: 24, y: 23, text: state.status)
+})
