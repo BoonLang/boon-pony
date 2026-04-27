@@ -1,0 +1,9 @@
+size = "80x24"
+frames = 3
+contains = [
+  "Cells",
+  "A1 5",
+  "B1 15",
+  "C1 30"
+]
+max_changed_cells_after_first_frame = 0

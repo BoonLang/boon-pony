@@ -1,0 +1,11 @@
+sources: [
+  keyboard: [event: [key_down: SOURCE]]
+  frame: [event: [tick: SOURCE]]
+]
+
+document: Terminal/canvas(width: 80, height: 24, items: LIST {
+  Canvas/text(x: 2, y: 1, text: TEXT { Cells })
+  Canvas/text(x: 2, y: 3, text: TEXT { A1 5 })
+  Canvas/text(x: 12, y: 3, text: TEXT { B1 15 })
+  Canvas/text(x: 22, y: 3, text: TEXT { C1 30 })
+})

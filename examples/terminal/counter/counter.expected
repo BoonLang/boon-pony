@@ -1,0 +1,17 @@
+[test]
+category = "terminal"
+description = "Terminal counter renders into the headless grid"
+
+[output]
+match = "contains"
+text = "Counter: 0"
+
+[[sequence]]
+description = "Canvas includes counter text"
+actions = [["assert_canvas_contains", "Counter: 0"]]
+expect = "Counter: 0"
+
+[[sequence]]
+description = "Semantic node for terminal canvas exists"
+actions = [["assert_node_exists", "counter.canvas"]]
+expect = "Counter: 0"

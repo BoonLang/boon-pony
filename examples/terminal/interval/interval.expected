@@ -1,0 +1,17 @@
+[test]
+category = "terminal"
+description = "Interval renders a terminal canvas with timer source"
+
+[output]
+match = "contains"
+text = "Interval:"
+
+[[sequence]]
+description = "Canvas includes interval label"
+actions = [["assert_canvas_contains", "Interval:"]]
+expect = "Interval: 2"
+
+[[sequence]]
+description = "Timer source advances frames"
+actions = [["tick"], ["frame"]]
+expect = "Interval: 2"

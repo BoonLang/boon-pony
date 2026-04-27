@@ -1,0 +1,7 @@
+size = "80x24"
+frames = 3
+contains = [
+  "Counter: 0",
+  "Enter increments"
+]
+max_changed_cells_after_first_frame = 0

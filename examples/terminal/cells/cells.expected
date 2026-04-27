@@ -1,0 +1,16 @@
+[test]
+category = "terminal"
+description = "Cells renders deterministic terminal canvas smoke"
+
+[output]
+match = "contains"
+text = "Cells"
+
+[[sequence]]
+description = "Canvas includes default spreadsheet values"
+actions = [
+  ["assert_canvas_contains", "A1 5"],
+  ["assert_canvas_contains", "B1 15"],
+  ["assert_canvas_contains", "C1 30"]
+]
+expect = "Cells"

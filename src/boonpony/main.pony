@@ -15,11 +15,13 @@ actor Main
       | "verify-parser" => _command_verify_parser(env)
       | "verify-source-shape" => _command_verify_source_shape(env)
       | "flow" => _command_flow(env)
-      | "compile" => _not_implemented(env, "compile")
-      | "build" => _not_implemented(env, "build")
-      | "verify" => _not_implemented(env, "verify")
-      | "verify-terminal" => _not_implemented(env, "verify-terminal")
-      | "snapshot" => _not_implemented(env, "snapshot")
+      | "compile" => _command_compile(env)
+      | "build" => _command_build(env)
+      | "verify" => _command_verify(env)
+      | "verify-terminal" => _command_verify_terminal(env)
+      | "verify-terminal-safety" => _command_verify_terminal_safety(env)
+      | "snapshot" => _command_snapshot(env)
+      | "protocol-smoke" => _command_protocol_smoke(env)
       | "bench" => _not_implemented(env, "bench")
       else
         env.err.print("error: unknown command: " + command)
@@ -33,6 +35,8 @@ actor Main
   fun _command_tui(env: Env) =>
     if _has_help(env) then
       Help.tui(env)
+    elseif _has_arg(env, "--keyboard-test") then
+      _run_tool(env, "node tools/terminal_safety.mjs keyboard-test")
     else
       _not_implemented(env, "tui")
     end
@@ -252,6 +256,218 @@ actor Main
       env.exitcode(2)
     end
 
+  fun _command_compile(env: Env) =>
+    _command_codegen_project(env, "compile")
+
+  fun _command_build(env: Env) =>
+    _command_codegen_project(env, "build")
+
+  fun _command_protocol_smoke(env: Env) =>
+    _command_codegen_project(env, "protocol-smoke")
+
+  fun _command_codegen_project(env: Env, tool: String) =>
+    if _has_help(env) then
+      _codegen_help(env, tool)
+      return
+    end
+
+    try
+      let project = env.args(2)?
+      var command = "node tools/codegen_runtime.mjs " + tool + " " + project
+      var index: USize = 3
+      while index < env.args.size() do
+        try
+          let arg = env.args(index)?
+          if arg == "--report" then
+            command = command + " --report " + env.args(index + 1)?
+            index = index + 2
+          else
+            env.err.print("error: unknown " + tool + " option: " + arg)
+            _codegen_help(env, tool)
+            env.exitcode(2)
+            return
+          end
+        else
+          env.err.print("error: " + tool + " option is missing a value")
+          _codegen_help(env, tool)
+          env.exitcode(2)
+          return
+        end
+      end
+      _run_tool(env, consume command)
+    else
+      env.err.print("error: " + tool + " requires an example project")
+      _codegen_help(env, tool)
+      env.exitcode(2)
+    end
+
+  fun _codegen_help(env: Env, tool: String) =>
+    if tool == "compile" then
+      Help.compile(env)
+    elseif tool == "build" then
+      Help.build(env)
+    else
+      Help.protocol_smoke(env)
+    end
+
+  fun _command_verify(env: Env) =>
+    if _has_help(env) then
+      Help.verify(env)
+      return
+    end
+
+    var target: String = ""
+    var report: String = ""
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--report" then
+          report = env.args(index + 1)?
+          index = index + 2
+        elseif target == "" then
+          target = arg
+          index = index + 1
+        else
+          env.err.print("error: unknown verify option: " + arg)
+          Help.verify(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: verify option is missing a value")
+        Help.verify(env)
+        env.exitcode(2)
+        return
+      end
+    end
+
+    if target == "" then
+      env.err.print("error: verify requires --all, an example directory, or an expected file")
+      Help.verify(env)
+      env.exitcode(2)
+      return
+    end
+
+    var command = "node tools/expected_runner.mjs verify " + target
+    if report != "" then
+      command = command + " --report " + report
+    end
+    _run_tool(env, consume command)
+
+  fun _command_snapshot(env: Env) =>
+    if _has_help(env) then
+      Help.snapshot(env)
+      return
+    end
+
+    try
+      let project = env.args(2)?
+      var command = "node tools/terminal_runner.mjs snapshot " + project
+      var index: USize = 3
+      while index < env.args.size() do
+        try
+          let arg = env.args(index)?
+          if (arg == "--size") or (arg == "--frames") or (arg == "--report") then
+            command = command + " " + arg + " " + env.args(index + 1)?
+            index = index + 2
+          else
+            env.err.print("error: unknown snapshot option: " + arg)
+            Help.snapshot(env)
+            env.exitcode(2)
+            return
+          end
+        else
+          env.err.print("error: snapshot option is missing a value")
+          Help.snapshot(env)
+          env.exitcode(2)
+          return
+        end
+      end
+      _run_tool(env, consume command)
+    else
+      env.err.print("error: snapshot requires an example project")
+      Help.snapshot(env)
+      env.exitcode(2)
+    end
+
+  fun _command_verify_terminal(env: Env) =>
+    if _has_help(env) then
+      Help.verify_terminal(env)
+      return
+    end
+
+    var target: String = ""
+    var report: String = ""
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--report" then
+          report = env.args(index + 1)?
+          index = index + 2
+        elseif target == "" then
+          target = arg
+          index = index + 1
+        else
+          env.err.print("error: unknown verify-terminal option: " + arg)
+          Help.verify_terminal(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: verify-terminal option is missing a value")
+        Help.verify_terminal(env)
+        env.exitcode(2)
+        return
+      end
+    end
+
+    if target == "" then
+      env.err.print("error: verify-terminal requires an example project or --all")
+      Help.verify_terminal(env)
+      env.exitcode(2)
+      return
+    end
+
+    var command = "node tools/terminal_runner.mjs verify-terminal " + target
+    if report != "" then
+      command = command + " --report " + report
+    end
+    _run_tool(env, consume command)
+
+  fun _command_verify_terminal_safety(env: Env) =>
+    if _has_help(env) then
+      Help.verify_terminal_safety(env)
+      return
+    end
+
+    var command = "node tools/terminal_safety.mjs verify-terminal-safety"
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--pty" then
+          command = command + " --pty"
+          index = index + 1
+        elseif arg == "--report" then
+          command = command + " --report " + env.args(index + 1)?
+          index = index + 2
+        else
+          env.err.print("error: unknown verify-terminal-safety option: " + arg)
+          Help.verify_terminal_safety(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: verify-terminal-safety option is missing a value")
+        Help.verify_terminal_safety(env)
+        env.exitcode(2)
+        return
+      end
+    end
+    _run_tool(env, consume command)
+
   fun _has_help(env: Env): Bool =>
     var index: USize = 2
     while index < env.args.size() do
@@ -289,7 +505,7 @@ actor Main
 
   fun _not_implemented(env: Env, command: String) =>
     env.err.print("error: command not implemented yet: " + command)
-    env.err.print("The current implementation is complete through Phase 3; continue with BOON_PONY_TUI_PLAN.md Phase 4.")
+    env.err.print("The current implementation is complete through Phase 8; continue with BOON_PONY_TUI_PLAN.md Phase 9.")
     env.exitcode(1)
 
 primitive Help
@@ -308,8 +524,10 @@ primitive Help
     env.out.print("  boonpony flow <file>")
     env.out.print("  boonpony compile <project>")
     env.out.print("  boonpony build <project>")
+    env.out.print("  boonpony protocol-smoke <project>")
     env.out.print("  boonpony verify <project-or---all>")
     env.out.print("  boonpony verify-terminal <project-or---all>")
+    env.out.print("  boonpony verify-terminal-safety --pty")
     env.out.print("  boonpony snapshot <project> --size 80x24 --frames 120")
     env.out.print("  boonpony bench <project-or---all>")
     env.out.print("")
@@ -321,6 +539,7 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony tui")
+    env.out.print("  boonpony tui --keyboard-test")
     env.out.print("  boonpony tui --example pong")
     env.out.print("  boonpony tui --script tests/examples/terminal_playground_sequence.json")
     env.out.print("")
@@ -373,3 +592,46 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony flow examples/source_physical/counter/counter.bn")
+
+  fun compile(env: Env) =>
+    env.out.print("boonpony compile - generate Pony source for a Boon project")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony compile examples/terminal/counter")
+
+  fun build(env: Env) =>
+    env.out.print("boonpony build - compile generated Pony source to a native binary")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony build examples/terminal/counter")
+
+  fun protocol_smoke(env: Env) =>
+    env.out.print("boonpony protocol-smoke - verify generated JSONL protocol mode")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony protocol-smoke examples/terminal/counter")
+
+  fun verify(env: Env) =>
+    env.out.print("boonpony verify - run expected-file contract checks")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony verify --all --report build/reports/verify.json")
+    env.out.print("  boonpony verify examples/upstream/counter")
+
+  fun snapshot(env: Env) =>
+    env.out.print("boonpony snapshot - render a headless terminal grid snapshot")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony snapshot examples/terminal/counter --size 80x24 --frames 3")
+
+  fun verify_terminal(env: Env) =>
+    env.out.print("boonpony verify-terminal - verify terminal grid fixtures")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony verify-terminal examples/terminal/counter")
+
+  fun verify_terminal_safety(env: Env) =>
+    env.out.print("boonpony verify-terminal-safety - verify raw input and terminal restoration")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony verify-terminal-safety --pty")
