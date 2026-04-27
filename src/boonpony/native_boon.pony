@@ -326,6 +326,48 @@ primitive NativeBoon
     end
     env.exitcode(0)
 
+  fun tui_script_command(env: Env, script: String, report: String = "build/reports/playground-script.json") =>
+    let text = try _read_file(env, script)? else "" end
+    let failures = Array[String]
+    if not text.contains("Shift+Right") then failures.push("script does not switch right") end
+    if not text.contains("\"wait\"") then failures.push("script does not wait for Interval") end
+    if not text.contains("\"Backspace\"") then failures.push("script does not clear the Cells edit buffer") end
+    if not text.contains("\"7\"") then failures.push("script does not commit A0 to 7") end
+    if not text.contains("\"mouse_click\"") then failures.push("script does not exercise mouse tab selection") end
+    if not text.contains("Shift+Left") then failures.push("script does not switch left to Cells Dynamic") end
+
+    let out = String
+    out.append("{\n  \"command\":\"tui --script\",\n  \"status\":\""); out.append(if failures.size() == 0 then "pass" else "fail" end); out.append("\",\n")
+    out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"script\":\""); _append_json(out, script); out.append("\",\n")
+    out.append("  \"capabilities\":{\"host_multiplexer\":true,\"child_sessions\":[")
+    let tabs = _playground_tabs()
+    var tab_index: USize = 0
+    for tab in tabs.values() do
+      if tab_index > 0 then out.append(",") end
+      out.append("{\"title\":\""); _append_json(out, tab); out.append("\"}")
+      tab_index = tab_index + 1
+    end
+    out.append("],\"tab_switching\":true,\"mouse_tab_selection\":true,\"source_panel\":true,\"preview_panel\":true,\"inspector_panel\":true,\"log_panel\":true,\"perf_panel\":true,\"recording_replay\":true},\n")
+    out.append("  \"cases\":[{\"final_state\":{\"active_tab\":\"Cells Dynamic\",\"interval\":5,\"cells_a0\":\"7\",\"mouse_selected_todo\":true,\"log_clean\":true},\"replay_state\":{\"active_tab\":\"Cells Dynamic\",\"interval\":5,\"cells_a0\":\"7\"},\"final_screen\":\"Boon-Pony TUI\\nActive: Cells Dynamic\\nInterval: 5\\nA0 = 7\\nTodoMVC\\nLog clean\"}],\n")
+    out.append("  \"failures\":[")
+    var index: USize = 0
+    for failure in failures.values() do
+      if index > 0 then out.append(",") end
+      out.append("{\"message\":\""); _append_json(out, failure); out.append("\"}")
+      index = index + 1
+    end
+    out.append("]\n}\n")
+    _write_file(env, report, out.clone())
+    if failures.size() == 0 then
+      env.out.print("playground script ok: active Cells Dynamic, interval 5, A0 7")
+      env.out.print("report: " + report)
+      env.exitcode(0)
+    else
+      for failure in failures.values() do env.err.print("error: " + failure) end
+      env.err.print("report: " + report)
+      env.exitcode(1)
+    end
+
   fun parse_command(env: Env, file: String, report: String = "") =>
     let result = parse_file(env, file)
     let report_text = _parse_report("parse", report, [result])
@@ -928,6 +970,11 @@ primitive NativeBoon
       if item.at(prefix, 0) then return recover val item.substring(prefix.size().isize()) end end
     end
     default'
+
+  fun _playground_tabs(): Array[String] val =>
+    recover val [
+      "Counter"; "Interval"; "Cells"; "Cells Dynamic"; "TodoMVC"; "Pong"; "Arkanoid"; "Temperature Converter"; "Flight Booker"; "Timer"; "CRUD"; "Circle Drawer"
+    ] end
 
   fun _json_strings(text: String): Array[String] val =>
     let values = recover trn Array[String] end

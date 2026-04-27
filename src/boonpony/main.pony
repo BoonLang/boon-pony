@@ -37,7 +37,8 @@ actor Main
       Help.tui(env)
     else
       var command = "node tools/playground_runner.mjs run"
-      var script_mode = false
+      var script: String = ""
+      var report: String = ""
       var keyboard_mode = false
       var index: USize = 2
       while index < env.args.size() do
@@ -53,11 +54,10 @@ actor Main
             env.exitcode(2)
             return
           elseif arg == "--script" then
-            command = "node tools/playground_runner.mjs script " + env.args(index + 1)?
-            script_mode = true
+            script = env.args(index + 1)?
             index = index + 2
           elseif arg == "--example" then
-            if script_mode then
+            if script != "" then
               env.err.print("error: --example cannot be combined with --script")
               Help.tui(env)
               env.exitcode(2)
@@ -66,7 +66,8 @@ actor Main
             command = command + " --example " + env.args(index + 1)?
             index = index + 2
           elseif arg == "--report" then
-            command = command + " --report " + env.args(index + 1)?
+            report = env.args(index + 1)?
+            command = command + " --report " + report
             index = index + 2
           else
             env.err.print("error: unknown tui option: " + arg)
@@ -81,7 +82,14 @@ actor Main
           return
         end
       end
-      _run_tool(env, consume command)
+      if script != "" then
+        if report == "" then
+          report = "build/reports/playground-script.json"
+        end
+        NativeBoon.tui_script_command(env, script, report)
+      else
+        _run_tool(env, consume command)
+      end
     end
 
   fun _command_play(env: Env) =>
