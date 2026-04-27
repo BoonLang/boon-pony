@@ -31,10 +31,12 @@ passing reports.
   Pony instead of repo-local Node tooling.
 - Manifest checking and expected-file contract verification now run in native
   Pony instead of repo-local Node tooling.
+- Terminal-grid verification now runs in native Pony instead of repo-local Node
+  tooling.
 
 ## Implementation Debt
 
-- Terminal-grid verification, benchmark orchestration, playground
+- Terminal snapshot rendering, benchmark orchestration, playground
   orchestration, upstream import, codegen orchestration, direct-play launchers,
   protocol smoke, and PTY smoke verification currently run through repo-local
   Node tooling launched by the Pony CLI.

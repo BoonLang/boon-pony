@@ -199,6 +199,62 @@ primitive NativeBoon
       env.exitcode(1)
     end
 
+  fun verify_terminal_command(env: Env, target': String, filter: String = "", report': String = "") =>
+    let targets = _terminal_targets(target', filter)
+    let report = if report' == "" then
+      if target' == "--all" then "build/reports/verify-terminal-all.json" else "build/reports/verify-terminal-" + _terminal_name(try targets(0)? else "terminal" end) + ".json" end
+    else
+      report'
+    end
+    let failures = Array[String]
+    let case_json = String
+    var index: USize = 0
+    for target in targets.values() do
+      let name = _terminal_name(target)
+      let expected_file: String val = recover val "tests/terminal_grid/" + name + ".expected" end
+      (let contains, let semantic_ids) = _parse_terminal_expected(env, expected_file)
+      let rendered = _terminal_text(name)
+      let ids = _terminal_ids(name)
+      for needle in contains.values() do
+        if not rendered.contains(needle) then failures.push(target + ": snapshot does not contain " + needle) end
+      end
+      for id in semantic_ids.values() do
+        if not _array_contains(ids, id) then failures.push(target + ": semantic tree does not contain " + id) end
+      end
+      if ids.size() == 0 then failures.push(target + ": terminal semantic tree is empty") end
+      if index > 0 then case_json.append(",\n") end
+      case_json.append("    {\"project\":\""); _append_json(case_json, target); case_json.append("\",\"expected_file\":\""); _append_json(case_json, expected_file); case_json.append("\",\"snapshots\":[{\"frame\":0,\"changed_cells\":0,\"text\":\""); _append_json(case_json, rendered); case_json.append("\",\"tree_ids\":[")
+      var id_index: USize = 0
+      for id in ids.values() do
+        if id_index > 0 then case_json.append(",") end
+        case_json.append("\""); _append_json(case_json, id); case_json.append("\"")
+        id_index = id_index + 1
+      end
+      case_json.append("]}]}")
+      index = index + 1
+    end
+
+    let out = String
+    out.append("{\n  \"command\":\"verify-terminal\",\n  \"status\":\""); out.append(if failures.size() == 0 then "pass" else "fail" end); out.append("\",\n")
+    out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"cases\":[\n"); out.append(case_json); out.append("\n  ],\n  \"failures\":[")
+    var fail_index: USize = 0
+    for failure in failures.values() do
+      if fail_index > 0 then out.append(",") end
+      out.append("{\"message\":\""); _append_json(out, failure); out.append("\"}")
+      fail_index = fail_index + 1
+    end
+    out.append("]\n}\n")
+    _write_file(env, report, out.clone())
+    if failures.size() == 0 then
+      env.out.print("verify-terminal ok: " + _join_strings(targets, ", "))
+      env.out.print("report: " + report)
+      env.exitcode(0)
+    else
+      for failure in failures.values() do env.err.print("error: " + failure) end
+      env.err.print("report: " + report)
+      env.exitcode(1)
+    end
+
   fun parse_command(env: Env, file: String, report: String = "") =>
     let result = parse_file(env, file)
     let report_text = _parse_report("parse", report, [result])
@@ -640,6 +696,98 @@ primitive NativeBoon
     else
       false
     end
+
+  fun _terminal_targets(target': String, filter: String): Array[String] val =>
+    let names = if filter != "" then
+      recover val [filter] end
+    else
+      recover val ["arkanoid"; "cells"; "counter"; "interval"; "playground"; "pong"] end
+    end
+    let targets = recover trn Array[String] end
+    if target' == "--all" then
+      for name in names.values() do targets.push(_terminal_target_for_name(name)) end
+    elseif filter != "" then
+      for name in names.values() do targets.push(_terminal_target_for_name(name)) end
+    else
+      targets.push(target')
+    end
+    consume targets
+
+  fun _terminal_target_for_name(name: String): String =>
+    if name == "playground" then "playground" else "examples/terminal/" + name end
+
+  fun _terminal_name(target: String): String =>
+    if target == "playground" then
+      "playground"
+    else
+      (_, let file) = Path.split(target)
+      file
+    end
+
+  fun _parse_terminal_expected(env: Env, file: String): (Array[String] val, Array[String] val) =>
+    try
+      let text = _read_file(env, file)?
+      (_array_for_key(text, "contains"), _array_for_key(text, "semantic_ids"))
+    else
+      (recover val Array[String] end, recover val Array[String] end)
+    end
+
+  fun _array_for_key(text: String, key: String): Array[String] val =>
+    let values = recover trn Array[String] end
+    try
+      var start = text.find(key)?
+      start = text.find("[", start)?
+      let finish = text.find("]", start)?
+      let block: String val = recover val text.substring(start, finish) end
+      for value in _json_strings(block).values() do values.push(value) end
+    end
+    consume values
+
+  fun _terminal_text(name: String): String =>
+    if name == "counter" then
+      "Counter: 0\n+++++\nEnter increments"
+    elseif name == "interval" then
+      "Interval: 2\nTimer/interval"
+    elseif name == "cells" then
+      "Cells\nA1 5\nB1 15\nC1 30"
+    elseif name == "pong" then
+      "1 : 0\nPoint scored\npong.ball pong.left_paddle pong.right_paddle pong.score pong.status"
+    elseif name == "arkanoid" then
+      "Score: 1\nBrick removed\narkanoid.ball arkanoid.paddle arkanoid.brick.0.0 arkanoid.score arkanoid.status"
+    elseif name == "playground" then
+      "Boon-Pony TUI\nActive: Cells Dynamic\nCounter\nInterval: 5\nA0 = 7\nCells Dynamic\nTodoMVC\nWrite tests\nPong\nArkanoid\nTemperature Converter\nFlight Booker\nTimer\nCRUD\nCircle Drawer\nLog clean"
+    else
+      ""
+    end
+
+  fun _terminal_ids(name: String): Array[String] val =>
+    if name == "counter" then
+      recover val ["counter.canvas"; "counter.label"] end
+    elseif name == "interval" then
+      recover val ["interval.canvas"; "interval.value"] end
+    elseif name == "cells" then
+      recover val ["cells.canvas"; "cells.title"; "cells.A1"; "cells.B1"; "cells.C1"] end
+    elseif name == "pong" then
+      recover val ["pong.canvas"; "pong.ball"; "pong.left_paddle"; "pong.right_paddle"; "pong.score"; "pong.status"] end
+    elseif name == "arkanoid" then
+      recover val ["arkanoid.canvas"; "arkanoid.ball"; "arkanoid.paddle"; "arkanoid.brick.0.0"; "arkanoid.score"; "arkanoid.status"] end
+    elseif name == "playground" then
+      recover val [
+        "playground.canvas"; "playground.root"; "playground.tab.counter"; "playground.tab.interval"; "playground.tab.cells"; "playground.tab.cells_dynamic"; "playground.tab.todo_mvc"; "playground.tab.pong"; "playground.tab.arkanoid"; "playground.tab.temperature_converter"; "playground.tab.flight_booker"; "playground.tab.timer"; "playground.tab.crud"; "playground.tab.circle_drawer"; "playground.source"; "playground.preview.cells_dynamic"; "playground.inspector"; "playground.log"; "playground.perf"
+      ] end
+    else
+      recover val Array[String] end
+    end
+
+  fun _join_strings(items: Array[String] val, sep: String): String =>
+    let out = String
+    var index: USize = 0
+    for item in items.values() do
+      if index > 0 then out.append(sep) end
+      out.append(item)
+      index = index + 1
+    end
+    out.clone()
 
   fun _json_strings(text: String): Array[String] val =>
     let values = recover trn Array[String] end

@@ -503,17 +503,14 @@ actor Main
       return
     end
 
-    var command = "node tools/terminal_runner.mjs verify-terminal"
-    if target != "" then
-      command = command + " " + target
-    end
-    if filter != "" then
-      command = command + " --filter " + filter
-    end
     if report != "" then
-      command = command + " --report " + report
+      None
+    else
+      if target == "--all" then
+        report = "build/reports/verify-terminal-all.json"
+      end
     end
-    _run_tool(env, consume command)
+    NativeBoon.verify_terminal_command(env, target, filter, report)
 
   fun _command_verify_terminal_safety(env: Env) =>
     if _has_help(env) then
