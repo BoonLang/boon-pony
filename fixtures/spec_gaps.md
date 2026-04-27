@@ -13,7 +13,8 @@ passing reports.
   provide that evidence.
 - Phase 5 terminal verification is headless-grid based.
 - Phase 6 raw-input safety is PTY-verified through a tmux harness.
-- Phase 7 codegen/runtime/protocol currently covers the counter terminal target.
+- Phase 7 codegen/runtime/protocol currently covers the counter, Pong, and
+  Arkanoid terminal targets.
 - Phase 8 terminal canvas smoke currently covers interval and cells.
 - Pong and Arkanoid have generated Pony direct/protocol mode, headless terminal
   verification, frame benchmarks, and tmux PTY smoke evidence.
@@ -37,13 +38,16 @@ passing reports.
   instead of repo-local Node tooling.
 - Scripted playground replay for `tui --script` now runs in native Pony instead
   of repo-local Node tooling.
+- Code generation orchestration, `ponyc` build invocation, generated JSONL
+  protocol smoke checks, and direct-play launchers now run in native Pony
+  instead of repo-local Node tooling.
 
 ## Implementation Debt
 
 - Terminal snapshot rendering, interactive playground/source-edit
-  orchestration, upstream import, codegen orchestration, direct-play launchers,
-  protocol smoke, raw keyboard safety, and PTY smoke verification currently run
-  through repo-local Node tooling launched by the Pony CLI.
+  orchestration, upstream import, raw keyboard safety, and PTY smoke
+  verification currently run through repo-local Node tooling launched by the
+  Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.

@@ -98,13 +98,13 @@ actor Main
     else
       try
         let project = env.args(2)?
-        var command = "node tools/play_runner.mjs play " + project
+        var report: String = ""
         var index: USize = 3
         while index < env.args.size() do
           try
             let arg = env.args(index)?
             if arg == "--report" then
-              command = command + " --report " + env.args(index + 1)?
+              report = env.args(index + 1)?
               index = index + 2
             else
               env.err.print("error: unknown play option: " + arg)
@@ -119,7 +119,7 @@ actor Main
             return
           end
         end
-        _run_tool(env, consume command)
+        NativeCodegen.play_command(env, project, report)
       else
         env.err.print("error: play requires a project path")
         Help.play(env)
@@ -351,13 +351,13 @@ actor Main
 
     try
       let project = env.args(2)?
-      var command = "node tools/codegen_runtime.mjs " + tool + " " + project
+      var report: String = ""
       var index: USize = 3
       while index < env.args.size() do
         try
           let arg = env.args(index)?
           if arg == "--report" then
-            command = command + " --report " + env.args(index + 1)?
+            report = env.args(index + 1)?
             index = index + 2
           else
             env.err.print("error: unknown " + tool + " option: " + arg)
@@ -372,7 +372,13 @@ actor Main
           return
         end
       end
-      _run_tool(env, consume command)
+      if tool == "compile" then
+        NativeCodegen.compile_command(env, project, report)
+      elseif tool == "build" then
+        NativeCodegen.build_command(env, project, report)
+      else
+        NativeCodegen.protocol_smoke_command(env, project, report)
+      end
     else
       env.err.print("error: " + tool + " requires an example project")
       _codegen_help(env, tool)
