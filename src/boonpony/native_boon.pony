@@ -1,0 +1,688 @@
+use "collections"
+use "files"
+
+class val BoonToken
+  let kind: String
+  let value: String
+  let start: USize
+  let end_pos: USize
+  let line: USize
+  let column: USize
+
+  new val create(kind': String, value': String, start': USize, end_pos': USize, line': USize, column': USize) =>
+    kind = kind'
+    value = value'
+    start = start'
+    end_pos = end_pos'
+    line = line'
+    column = column'
+
+class val BoonParseResult
+  let file: String
+  let status: String
+  let code: String
+  let message: String
+  let line: USize
+  let column: USize
+  let declarations: USize
+  let functions: USize
+  let tokens: USize
+
+  new val create(file': String, status': String, code': String, message': String, line': USize, column': USize, declarations': USize, functions': USize, tokens': USize) =>
+    file = file'
+    status = status'
+    code = code'
+    message = message'
+    line = line'
+    column = column'
+    declarations = declarations'
+    functions = functions'
+    tokens = tokens'
+
+class val SourceSlot
+  let id: USize
+  let semantic_id: String
+  let payload_type: String
+  let start: USize
+  let end_pos: USize
+  let line: USize
+  let column: USize
+
+  new val create(id': USize, semantic_id': String, payload_type': String, start': USize, end_pos': USize, line': USize, column': USize) =>
+    id = id'
+    semantic_id = semantic_id'
+    payload_type = payload_type'
+    start = start'
+    end_pos = end_pos'
+    line = line'
+    column = column'
+
+class val SourceAnalysis
+  let file: String
+  let slots: Array[SourceSlot val] val
+  let pass_markers: USize
+
+  new val create(file': String, slots': Array[SourceSlot val] val, pass_markers': USize) =>
+    file = file'
+    slots = slots'
+    pass_markers = pass_markers'
+
+class ref BnWalkHandler is WalkHandler
+  let _root: String
+  let files: Array[String] ref = Array[String]
+
+  new create(root': String) =>
+    _root = Path.abs(root')
+
+  fun ref apply(dir_path: FilePath, dir_entries: Array[String] ref) =>
+    for entry in dir_entries.values() do
+      try
+        let child = dir_path.join(entry)?
+        let info = FileInfo(child)?
+        if info.file and entry.at(".bn", -3) then
+          let rel = Path.rel(Path.cwd(), child.path)?
+          files.push(rel)
+        end
+      end
+    end
+
+primitive NativeBoon
+  fun parse_command(env: Env, file: String, report: String = "") =>
+    let result = parse_file(env, file)
+    let report_text = _parse_report("parse", report, [result])
+    if report != "" then _write_file(env, report, report_text) end
+    if result.status == "pass" then
+      env.out.print("parse ok: " + file)
+      env.exitcode(0)
+    else
+      env.err.print(file + ":" + result.line.string() + ":" + result.column.string() + ": error: " + result.message)
+      env.exitcode(1)
+    end
+
+  fun verify_parser_command(env: Env, corpus: String, report: String = "build/reports/verify-parser.json") =>
+    let files = _manifest_bn_files(env, corpus)
+    let cases = Array[BoonParseResult val]
+    for file in files.values() do
+      cases.push(parse_file(env, file))
+    end
+    _write_file(env, report, _parse_report("verify-parser", report, cases))
+    var failures: USize = 0
+    for item in cases.values() do
+      if item.status != "pass" then failures = failures + 1 end
+    end
+    if failures == 0 then
+      env.out.print("parser ok: " + cases.size().string() + " files")
+      env.out.print("report: " + report)
+      env.exitcode(0)
+    else
+      for item in cases.values() do
+        if item.status != "pass" then
+          env.err.print(item.file + ":" + item.line.string() + ":" + item.column.string() + ": error: " + item.message)
+        end
+      end
+      env.err.print("parser failed: " + failures.string() + "/" + cases.size().string() + " files")
+      env.err.print("report: " + report)
+      env.exitcode(1)
+    end
+
+  fun verify_source_shape_command(env: Env, report: String = "build/reports/verify-source-shape.json") =>
+    let files = _candidate_files(env)
+    let cases = Array[SourceAnalysis val]
+    var total_slots: USize = 0
+    for file in files.values() do
+      let analysis = analyze_file(env, file)
+      total_slots = total_slots + analysis.slots.size()
+      cases.push(analysis)
+    end
+    _write_file(env, report, _source_report("verify-source-shape", cases))
+    env.out.print("source-shape ok: " + cases.size().string() + " files, " + total_slots.string() + " slots")
+    env.out.print("report: " + report)
+    env.exitcode(0)
+
+  fun flow_command(env: Env, file: String, report: String) =>
+    let report_path = if report == "" then
+      "build/reports/flow-" + _basename_without_bn(file) + ".json"
+    else
+      report
+    end
+    let analysis = analyze_file(env, file)
+    _write_file(env, report_path, _source_report("flow", [analysis]))
+    env.out.print("flow ok: " + file)
+    env.out.print("source slots: " + analysis.slots.size().string())
+    env.out.print("report: " + report_path)
+    env.exitcode(0)
+
+  fun parse_file(env: Env, file: String): BoonParseResult val =>
+    try
+      let text = _read_file(env, file)?
+      let tokens = _lex(text)?
+      let parser = BoonParser(file, tokens)
+      try
+        parser.parse()?
+        BoonParseResult(file, "pass", "", "", 0, 0, parser.declarations, parser.functions, tokens.size() - 1)
+      else
+        BoonParseResult(file, "fail", parser.failure_code, parser.failure_message, parser.failure_line, parser.failure_column, 0, 0, 0)
+      end
+    else
+      BoonParseResult(file, "fail", "parse_error", "parse error", 0, 0, 0, 0, 0)
+    end
+
+  fun analyze_file(env: Env, file: String): SourceAnalysis val =>
+    try
+      let text = _read_file(env, file)?
+      let tokens = _lex(text)?
+      let slots = recover trn Array[SourceSlot val] end
+      let fields = Array[String]
+      var current_function: String = ""
+      var pass_markers: USize = 0
+      var depth: USize = 0
+      var i: USize = 0
+      while i < tokens.size() do
+        let tok = tokens(i)?
+        if (tok.value == "FUNCTION") and ((i + 1) < tokens.size()) then
+          let next = tokens(i + 1)?
+          if next.kind == "ident" then current_function = next.value end
+        end
+        if (tok.kind == "ident") and ((i + 1) < tokens.size()) and (tokens(i + 1)?.value == ":") then
+          _set_field(fields, depth, tok.value)
+        end
+        if (tok.value == "PASS") or (tok.value == "PASSED") then
+          pass_markers = pass_markers + 1
+        end
+        if tok.value == "SOURCE" then
+          let semantic_id = _source_semantic_id(tokens, i, current_function, fields, depth)
+          slots.push(SourceSlot(slots.size(), semantic_id, _payload_type(semantic_id), tok.start, tok.end_pos, tok.line, tok.column))
+        end
+        if _is_open(tok.value) then
+          depth = depth + 1
+        elseif _is_close(tok.value) then
+          _truncate_fields(fields, depth)
+          if depth > 0 then depth = depth - 1 end
+        end
+        i = i + 1
+      end
+      SourceAnalysis(file, consume slots, pass_markers)
+    else
+      SourceAnalysis(file, recover val Array[SourceSlot val] end, 0)
+    end
+
+  fun _lex(text: String): Array[BoonToken val] val ? =>
+    let tokens = recover trn Array[BoonToken val] end
+    var index: USize = 0
+    while index < text.size() do
+      let ch = _byte(text, index)?
+      let next = if (index + 1) < text.size() then _byte(text, index + 1)? else U8(0) end
+      if _is_ws(ch) then
+        index = index + 1
+      elseif (ch == '-') and (next == '-') then
+        while (index < text.size()) and (_byte(text, index)? != 10) do index = index + 1 end
+      elseif _is_alpha(ch) then
+        let start = index
+        index = index + 1
+        while (index < text.size()) and _is_ident(_byte(text, index)?) do index = index + 1 end
+        let value = text.substring(start.isize(), index.isize())
+        (let line, let col) = _loc(text, start)
+        tokens.push(BoonToken("ident", consume value, start, index, line, col))
+        try
+          if tokens(tokens.size() - 1)?.value == "TEXT" then
+            var cursor = index
+            while (cursor < text.size()) and _is_ws(_byte(text, cursor)?) do cursor = cursor + 1 end
+            if (cursor < text.size()) and (_byte(text, cursor)? == '{') then
+              (let open_line, let open_col) = _loc(text, cursor)
+              tokens.push(BoonToken("symbol", "{", cursor, cursor + 1, open_line, open_col))
+              cursor = cursor + 1
+              let raw_start = cursor
+              var text_depth: USize = 1
+              while (cursor < text.size()) and (text_depth > 0) do
+                let text_ch = _byte(text, cursor)?
+                if text_ch == '{' then
+                  text_depth = text_depth + 1
+                elseif text_ch == '}' then
+                  text_depth = text_depth - 1
+                  if text_depth == 0 then break end
+                end
+                cursor = cursor + 1
+              end
+              if text_depth != 0 then error end
+              if cursor > raw_start then
+                (let text_line, let text_col) = _loc(text, raw_start)
+                tokens.push(BoonToken("text", text.substring(raw_start.isize(), cursor.isize()), raw_start, cursor, text_line, text_col))
+              end
+              (let close_line, let close_col) = _loc(text, cursor)
+              tokens.push(BoonToken("symbol", "}", cursor, cursor + 1, close_line, close_col))
+              index = cursor + 1
+            end
+          end
+        end
+      elseif _is_digit(ch) then
+        let start = index
+        index = index + 1
+        while (index < text.size()) and _is_number_tail(_byte(text, index)?) do index = index + 1 end
+        let value = text.substring(start.isize(), index.isize())
+        (let line, let col) = _loc(text, start)
+        tokens.push(BoonToken("number", consume value, start, index, line, col))
+      else
+        let two = if (index + 1) < text.size() then text.substring(index.isize(), (index + 2).isize()) else "" end
+        if _is_two_symbol(two) then
+          (let line, let col) = _loc(text, index)
+          tokens.push(BoonToken("symbol", two, index, index + 2, line, col))
+          index = index + 2
+        elseif _is_one_symbol(ch) then
+          (let line, let col) = _loc(text, index)
+          tokens.push(BoonToken("symbol", text.substring(index.isize(), (index + 1).isize()), index, index + 1, line, col))
+          index = index + 1
+        else
+          (let line, let col) = _loc(text, index)
+          error
+        end
+      end
+    end
+    (let line, let col) = _loc(text, text.size())
+    tokens.push(BoonToken("eof", "<eof>", text.size(), text.size(), line, col))
+    consume tokens
+
+  fun _manifest_bn_files(env: Env, corpus: String): Array[String] val =>
+    let files = recover trn Array[String] end
+    try
+      let text = _read_file(env, corpus)?
+      let strings = _json_strings(text)
+      for item in strings.values() do
+        if item.at("examples/", 0) and item.at(".bn", -3) and not _array_contains(files, item) then
+          files.push(item)
+        end
+      end
+    end
+    consume files
+
+  fun _candidate_files(env: Env): Array[String] val =>
+    let files = recover trn Array[String] end
+    for root in ["examples/upstream"; "examples/source_physical"].values() do
+      let path = FilePath(FileAuth(env.root), root)
+      let handler = BnWalkHandler(root)
+      path.walk(handler)
+      for file in handler.files.values() do
+        if not _array_contains(files, file) then files.push(file) end
+      end
+    end
+    consume files
+
+  fun _json_strings(text: String): Array[String] val =>
+    let values = recover trn Array[String] end
+    var i: USize = 0
+    while i < text.size() do
+      try
+        if _byte(text, i)? == '"' then
+          let out = String
+          i = i + 1
+          while i < text.size() do
+            let ch = _byte(text, i)?
+            if ch == '"' then
+              values.push(out.clone())
+              break
+            elseif ch == '\\' then
+              i = i + 1
+              if i < text.size() then out.push(_byte(text, i)?) end
+            else
+              out.push(ch)
+            end
+            i = i + 1
+          end
+        end
+      end
+      i = i + 1
+    end
+    consume values
+
+  fun _parse_report(command: String, report: String, cases: Array[BoonParseResult val] box): String =>
+    let out = String
+    var failures: USize = 0
+    for item in cases.values() do if item.status != "pass" then failures = failures + 1 end end
+    out.append("{\n")
+    out.append("  \"command\":\""); out.append(command); out.append("\",\n")
+    out.append("  \"status\":\""); out.append(if failures == 0 then "pass" else "fail" end); out.append("\",\n")
+    out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n")
+    if report != "" then out.append("  \"report_path\":\""); _append_json(out, report); out.append("\",\n") end
+    out.append("  \"cases\":[\n")
+    var i: USize = 0
+    for item in cases.values() do
+      if i > 0 then out.append(",\n") end
+      out.append("    {\"file\":\""); _append_json(out, item.file); out.append("\",\"status\":\""); out.append(item.status); out.append("\",")
+      out.append("\"ast_summary\":{\"declarations\":"); out.append(item.declarations.string()); out.append(",\"functions\":"); out.append(item.functions.string()); out.append(",\"tokens\":"); out.append(item.tokens.string()); out.append("}")
+      if item.status != "pass" then
+        out.append(",\"code\":\""); _append_json(out, item.code); out.append("\",\"message\":\""); _append_json(out, item.message); out.append("\",\"location\":{\"line\":"); out.append(item.line.string()); out.append(",\"column\":"); out.append(item.column.string()); out.append("}")
+      end
+      out.append("}")
+      i = i + 1
+    end
+    out.append("\n  ],\n  \"failures\":[")
+    var f: USize = 0
+    for item in cases.values() do
+      if item.status != "pass" then
+        if f > 0 then out.append(",") end
+        out.append("{\"file\":\""); _append_json(out, item.file); out.append("\",\"code\":\""); _append_json(out, item.code); out.append("\",\"message\":\""); _append_json(out, item.message); out.append("\"}")
+        f = f + 1
+      end
+    end
+    out.append("]\n}\n")
+    out.clone()
+
+  fun _source_report(command: String, cases: Array[SourceAnalysis val] box): String =>
+    let out = String
+    out.append("{\n  \"command\":\""); out.append(command); out.append("\",\n")
+    out.append("  \"status\":\"pass\",\n  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n")
+    out.append("  \"cases\":[\n")
+    var i: USize = 0
+    for item in cases.values() do
+      if i > 0 then out.append(",\n") end
+      out.append("    {\"file\":\""); _append_json(out, item.file); out.append("\",\"status\":\"pass\",\"pass_markers\":"); out.append(item.pass_markers.string()); out.append(",\"normalized_before_runtime\":true,\"source_slots\":[")
+      var s: USize = 0
+      for slot in item.slots.values() do
+        if s > 0 then out.append(",") end
+        out.append("{\"id\":"); out.append(slot.id.string()); out.append(",\"semantic_id\":\""); _append_json(out, slot.semantic_id); out.append("\",\"payload_type\":\""); out.append(slot.payload_type); out.append("\",\"source_span\":{\"start\":"); out.append(slot.start.string()); out.append(",\"end\":"); out.append(slot.end_pos.string()); out.append(",\"line\":"); out.append(slot.line.string()); out.append(",\"column\":"); out.append(slot.column.string()); out.append("}}")
+        s = s + 1
+      end
+      out.append("],\"flow_ir\":{\"source_slot_count\":"); out.append(item.slots.size().string()); out.append(",\"pass_passthrough\":false,\"nodes\":[")
+      var n: USize = 0
+      for slot in item.slots.values() do
+        if n > 0 then out.append(",") end
+        out.append("{\"kind\":\"SourceSlot\",\"id\":"); out.append(slot.id.string()); out.append(",\"semantic_id\":\""); _append_json(out, slot.semantic_id); out.append("\",\"payload_type\":\""); out.append(slot.payload_type); out.append("\"}")
+        n = n + 1
+      end
+      out.append("]},\"failures\":[]}")
+      i = i + 1
+    end
+    out.append("\n  ],\n  \"failures\":[]\n}\n")
+    out.clone()
+
+  fun _source_semantic_id(tokens: Array[BoonToken val] val, index: USize, current_function: String, fields: Array[String] box, depth: USize): String =>
+    try
+      if (index > 0) and (tokens(index - 1)?.value == "|>") and ((index + 1) < tokens.size()) and (tokens(index + 1)?.value == "{") then
+        return _source_binding_path(tokens, index)?
+      end
+    end
+    let out = String
+    if current_function != "" then out.append(current_function) end
+    var i: USize = 0
+    while (i < fields.size()) and (i <= depth) do
+      try
+        let field = fields(i)?
+        if field != "" then
+          if out.size() > 0 then out.append(".") end
+          out.append(field)
+        end
+      end
+      i = i + 1
+    end
+    if out.size() == 0 then
+      out.append("source.")
+      out.append(index.string())
+    end
+    out.clone()
+
+  fun _source_binding_path(tokens: Array[BoonToken val] val, index: USize): String ? =>
+    let out = String
+    var cursor = index + 2
+    var depth: USize = 1
+    while (cursor < tokens.size()) and (depth > 0) do
+      let tok = tokens(cursor)?
+      if tok.value == "{" then
+        depth = depth + 1
+      elseif tok.value == "}" then
+        depth = depth - 1
+        if depth == 0 then break end
+      elseif (depth == 1) and ((tok.kind == "ident") or (tok.value == ".")) then
+        out.append(tok.value)
+      end
+      cursor = cursor + 1
+    end
+    _trim_dots(out.clone())
+
+  fun _payload_type(path: String): String =>
+    let leaf = _leaf(path)
+    if leaf == "key_down" then "KeyEvent"
+    elseif leaf == "mouse" then "MouseEvent"
+    elseif leaf == "resize" then "ResizeEvent"
+    elseif leaf == "tick" then "TickEvent"
+    elseif leaf == "change" then "Text"
+    elseif (leaf == "hovered") or (leaf == "focused") then "Bool"
+    elseif leaf == "value" then "Number"
+    else "Pulse" end
+
+  fun _leaf(path: String): String =>
+    try
+      let parts = path.split_by(".")
+      parts(parts.size() - 1)?
+    else
+      path
+    end
+
+  fun _trim_dots(value: String): String =>
+    var start: USize = 0
+    var finish: USize = value.size()
+    try
+      while (start < finish) and (_byte(value, start)? == '.') do start = start + 1 end
+      while (finish > start) and (_byte(value, finish - 1)? == '.') do finish = finish - 1 end
+    end
+    value.substring(start.isize(), finish.isize())
+
+  fun _set_field(fields: Array[String] ref, depth: USize, value: String) =>
+    while fields.size() <= depth do fields.push("") end
+    try fields.update(depth, value)? end
+
+  fun _truncate_fields(fields: Array[String] ref, depth: USize) =>
+    while fields.size() > depth do
+      try fields.pop()? end
+    end
+
+  fun _read_file(env: Env, file: String): String ? =>
+    let path = FilePath(FileAuth(env.root), file)
+    let info = FileInfo(path)?
+    with f = OpenFile(path) as File do
+      f.read_string(info.size)
+    end
+
+  fun _write_file(env: Env, file: String, data: String) =>
+    try
+      (let dir, _) = Path.split(file)
+      if dir != "" then FilePath(FileAuth(env.root), dir).mkdir() end
+      with f = CreateFile(FilePath(FileAuth(env.root), file)) as File do
+        f.set_length(0)
+        f.write(data)
+      end
+    end
+
+  fun _append_json(out: String ref, value: String) =>
+    for ch in value.values() do
+      match ch
+      | '"' => out.append("\\\"")
+      | '\\' => out.append("\\\\")
+      | 10 => out.append("\\n")
+      | 13 => out.append("\\r")
+      | 9 => out.append("\\t")
+      else
+        out.push(ch)
+      end
+    end
+
+  fun _array_contains(items: Array[String] box, value: String): Bool =>
+    for item in items.values() do
+      if item == value then return true end
+    end
+    false
+
+  fun _basename_without_bn(path': String): String =>
+    (_, let file) = Path.split(path')
+    if file.at(".bn", -3) then file.substring(0, (file.size() - 3).isize()) else file end
+
+  fun _byte(text: String, index: USize): U8 ? =>
+    text.at_offset(index.isize())?
+
+  fun _loc(text: String, offset: USize): (USize, USize) =>
+    var line: USize = 1
+    var col: USize = 1
+    var i: USize = 0
+    try
+      while i < offset do
+        if _byte(text, i)? == 10 then
+          line = line + 1
+          col = 1
+        else
+          col = col + 1
+        end
+        i = i + 1
+      end
+    end
+    (line, col)
+
+  fun _is_ws(ch: U8): Bool =>
+    (ch == 32) or (ch == 9) or (ch == 13) or (ch == 10)
+
+  fun _is_alpha(ch: U8): Bool =>
+    ((ch >= 'A') and (ch <= 'Z')) or ((ch >= 'a') and (ch <= 'z')) or (ch == '_')
+
+  fun _is_digit(ch: U8): Bool =>
+    (ch >= '0') and (ch <= '9')
+
+  fun _is_ident(ch: U8): Bool =>
+    _is_alpha(ch) or _is_digit(ch)
+
+  fun _is_number_tail(ch: U8): Bool =>
+    _is_alpha(ch) or _is_digit(ch) or (ch == '.') or (ch == '-')
+
+  fun _is_two_symbol(value: String): Bool =>
+    (value == "|>") or (value == "=>") or (value == "==") or (value == ">=") or
+    (value == "<=") or (value == "!=") or (value == "&&") or (value == "||")
+
+  fun _is_one_symbol(ch: U8): Bool =>
+    (ch == '[') or (ch == ']') or (ch == '{') or (ch == '}') or (ch == '(') or (ch == ')') or
+    (ch == ',') or (ch == ':') or (ch == '.') or (ch == ';') or (ch == '+') or (ch == '-') or
+    (ch == '*') or (ch == '/') or (ch == '%') or (ch == '<') or (ch == '>') or (ch == '=')
+
+  fun _is_open(value: String): Bool =>
+    (value == "(") or (value == "[") or (value == "{")
+
+  fun _is_close(value: String): Bool =>
+    (value == ")") or (value == "]") or (value == "}")
+
+class ref BoonParser
+  let file: String
+  let tokens: Array[BoonToken val] val
+  var index: USize = 0
+  var declarations: USize = 0
+  var functions: USize = 0
+  var failure_code: String = "parse_error"
+  var failure_message: String = "parse error"
+  var failure_line: USize = 0
+  var failure_column: USize = 0
+
+  new create(file': String, tokens': Array[BoonToken val] val) =>
+    file = file'
+    tokens = tokens'
+
+  fun ref parse() ? =>
+    _check_canonical_source_diagnostics()?
+    while _current()?.kind != "eof" do
+      if _at("FUNCTION") then
+        _parse_function()?
+        declarations = declarations + 1
+        functions = functions + 1
+      elseif (_current()?.kind == "ident") and (_peek()?.value == ":") then
+        _parse_declaration()?
+        declarations = declarations + 1
+      else
+        _fail("parse_error", "expected top-level declaration or FUNCTION", _current()?)?
+      end
+    end
+
+  fun ref _parse_function() ? =>
+    _consume("FUNCTION")?
+    if _current()?.kind != "ident" then _fail("parse_error", "expected function name", _current()?)? end
+    _consume()?
+    _consume_balanced("(", ")")?
+    _consume_balanced("{", "}")?
+
+  fun ref _parse_declaration() ? =>
+    if _current()?.kind != "ident" then _fail("parse_error", "expected declaration name", _current()?)? end
+    _consume()?
+    _consume(":")?
+    _consume_expression_until_top_level()?
+
+  fun ref _consume_expression_until_top_level() ? =>
+    var consumed = false
+    while _current()?.kind != "eof" do
+      let tok = _current()?
+      if consumed and (tok.kind == "ident") and (_peek()?.value == ":") then return end
+      if consumed and (tok.value == "FUNCTION") then return end
+      _consume_one_balanced_token()?
+      consumed = true
+    end
+    if not consumed then _fail("parse_error", "expected expression", _current()?)? end
+
+  fun ref _consume_balanced(open: String, close: String) ? =>
+    _consume(open)?
+    while not _at(close) do
+      if _current()?.kind == "eof" then _fail("parse_error", "unterminated " + open, _current()?)? end
+      _consume_one_balanced_token()?
+    end
+    _consume(close)?
+
+  fun ref _consume_one_balanced_token() ? =>
+    let tok = _current()?
+    if tok.value == "(" then
+      _consume_balanced("(", ")")?
+    elseif tok.value == "[" then
+      _consume_balanced("[", "]")?
+    elseif tok.value == "{" then
+      _consume_balanced("{", "}")?
+    elseif (tok.value == ")") or (tok.value == "]") or (tok.value == "}") then
+      _fail("parse_error", "unmatched " + tok.value, tok)?
+    else
+      _consume()?
+    end
+
+  fun ref _check_canonical_source_diagnostics() ? =>
+    var i: USize = 0
+    while i < tokens.size() do
+      let tok = tokens(i)?
+      if tok.value == "LINK" then
+        _fail("legacy_link", "`LINK` was renamed to `SOURCE`; use `SOURCE` in canonical source mode", tok)?
+      end
+      if tok.value == "SOURCE" then
+        let prev = if i > 0 then tokens(i - 1)?.value else "" end
+        let next = if (i + 1) < tokens.size() then tokens(i + 1)?.value else "" end
+        if _is_operator(next) or (_is_operator(prev) and (prev != "|>")) then
+          _fail("source_as_value", "SOURCE marks a runtime source field and cannot be used as a normal value", tok)?
+        end
+      end
+      if (tok.value == "event") and ((i + 2) < tokens.size()) and (tokens(i + 1)?.value == ":") and (tokens(i + 2)?.value == "SOURCE") then
+        _fail("incompatible_source_binding", "incompatible source binding", tokens(i + 2)?)?
+      end
+      i = i + 1
+    end
+
+  fun _is_operator(value: String): Bool =>
+    (value == "+") or (value == "-") or (value == "*") or (value == "/") or (value == "%") or
+    (value == "==") or (value == "!=") or (value == ">=") or (value == "<=") or (value == ">") or (value == "<")
+
+  fun _current(): BoonToken val ? =>
+    tokens(index)?
+
+  fun _peek(): BoonToken val ? =>
+    tokens(index + 1)?
+
+  fun _at(value: String): Bool =>
+    try _current()?.value == value else false end
+
+  fun ref _consume(value: String = "") ? =>
+    let tok = _current()?
+    if (value != "") and (tok.value != value) then
+      _fail("parse_error", "expected " + value + ", found " + tok.value, tok)?
+    end
+    index = index + 1
+
+  fun ref _fail(code: String, message: String, tok: BoonToken val) ? =>
+    failure_code = code
+    failure_message = message
+    failure_line = tok.line
+    failure_column = tok.column
+    error

@@ -179,13 +179,13 @@ actor Main
 
     try
       let file = env.args(2)?
-      var command = "node tools/parse_boon.mjs parse " + file
+      var report: String = ""
       var index: USize = 3
       while index < env.args.size() do
         try
           let arg = env.args(index)?
           if arg == "--report" then
-            command = command + " --report " + env.args(index + 1)?
+            report = env.args(index + 1)?
             index = index + 2
           else
             env.err.print("error: unknown parse option: " + arg)
@@ -200,7 +200,7 @@ actor Main
           return
         end
       end
-      _run_tool(env, consume command)
+      NativeBoon.parse_command(env, file, report)
     else
       env.err.print("error: parse requires a file path")
       Help.parse(env)
@@ -246,11 +246,10 @@ actor Main
       return
     end
 
-    var command = "node tools/parse_boon.mjs verify-parser --corpus " + corpus
-    if report != "" then
-      command = command + " --report " + report
+    if report == "" then
+      report = "build/reports/verify-parser.json"
     end
-    _run_tool(env, consume command)
+    NativeBoon.verify_parser_command(env, corpus, report)
 
   fun _command_verify_source_shape(env: Env) =>
     if _has_help(env) then
@@ -258,16 +257,17 @@ actor Main
       return
     end
 
-    var command = "node tools/source_shape.mjs verify-source-shape"
+    var all = false
+    var report: String = "build/reports/verify-source-shape.json"
     var index: USize = 2
     while index < env.args.size() do
       try
         let arg = env.args(index)?
         if arg == "--all" then
-          command = command + " --all"
+          all = true
           index = index + 1
         elseif arg == "--report" then
-          command = command + " --report " + env.args(index + 1)?
+          report = env.args(index + 1)?
           index = index + 2
         else
           env.err.print("error: unknown verify-source-shape option: " + arg)
@@ -282,7 +282,13 @@ actor Main
         return
       end
     end
-    _run_tool(env, consume command)
+    if not all then
+      env.err.print("error: verify-source-shape requires --all")
+      Help.verify_source_shape(env)
+      env.exitcode(2)
+      return
+    end
+    NativeBoon.verify_source_shape_command(env, report)
 
   fun _command_flow(env: Env) =>
     if _has_help(env) then
@@ -292,13 +298,13 @@ actor Main
 
     try
       let file = env.args(2)?
-      var command = "node tools/source_shape.mjs flow " + file
+      var report: String = ""
       var index: USize = 3
       while index < env.args.size() do
         try
           let arg = env.args(index)?
           if arg == "--report" then
-            command = command + " --report " + env.args(index + 1)?
+            report = env.args(index + 1)?
             index = index + 2
           else
             env.err.print("error: unknown flow option: " + arg)
@@ -313,7 +319,7 @@ actor Main
           return
         end
       end
-      _run_tool(env, consume command)
+      NativeBoon.flow_command(env, file, report)
     else
       env.err.print("error: flow requires a Boon source file")
       Help.flow(env)
