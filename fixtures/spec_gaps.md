@@ -33,13 +33,15 @@ passing reports.
   Pony instead of repo-local Node tooling.
 - Terminal-grid verification now runs in native Pony instead of repo-local Node
   tooling.
+- Benchmark matrix and benchmark report generation now run in native Pony
+  instead of repo-local Node tooling.
 
 ## Implementation Debt
 
-- Terminal snapshot rendering, benchmark orchestration, playground
-  orchestration, upstream import, codegen orchestration, direct-play launchers,
-  protocol smoke, and PTY smoke verification currently run through repo-local
-  Node tooling launched by the Pony CLI.
+- Terminal snapshot rendering, playground orchestration, upstream import,
+  codegen orchestration, direct-play launchers, protocol smoke, and PTY smoke
+  verification currently run through repo-local Node tooling launched by the
+  Pony CLI.
 - The final contract requires implementation code to move into Pony before
   completion is claimed. The generated terminal applications are Pony, but the
   native Pony parser/runtime/compiler/playground stack is not yet complete.

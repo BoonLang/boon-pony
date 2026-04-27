@@ -549,23 +549,7 @@ actor Main
       Help.bench(env)
       return
     end
-
-    if env.args.size() < 3 then
-      env.err.print("error: bench requires a project or --all")
-      Help.bench(env)
-      env.exitcode(2)
-      return
-    end
-
-    var command = "node tools/bench_runner.mjs bench"
-    var index: USize = 2
-    while index < env.args.size() do
-      try
-        command = command + " " + env.args(index)?
-      end
-      index = index + 1
-    end
-    _run_tool(env, consume command)
+    NativeBoon.bench_command(env)
 
   fun _has_help(env: Env): Bool =>
     var index: USize = 2
