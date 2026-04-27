@@ -289,7 +289,7 @@ actor Main
 
   fun _not_implemented(env: Env, command: String) =>
     env.err.print("error: command not implemented yet: " + command)
-    env.err.print("Phase 0 only provides the CLI bootstrap and help surface.")
+    env.err.print("The current implementation is complete through Phase 3; continue with BOON_PONY_TUI_PLAN.md Phase 4.")
     env.exitcode(1)
 
 primitive Help
