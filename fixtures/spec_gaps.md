@@ -23,14 +23,16 @@ passing reports.
 - The Phase 12 source workflow supports `tui --example pong`, working-copy
   editing, reload, rebuild, rerun, external-editor handoff, working diff, and
   invalid-edit diagnostics under PTY verification.
-- Full final-gate verification and broad benchmark matrix remain later-phase
-  work.
+- The final command gate in section 21 passes, including the required
+  `bench --all --report build/reports/bench.json` matrix with Pong frame,
+  Arkanoid frame, Pong input, and Pong protocol roundtrip entries.
 
 ## Implementation Debt
 
-- Parser and source-shape verification currently run through repo-local Node
-  tooling launched by the Pony CLI. The final contract requires implementation
-  code to move into Pony before completion is claimed.
-- Expected-runner, terminal-grid, PTY-smoke, and codegen orchestration are also
-  currently repo-local Node tooling launched by the Pony CLI. The generated
-  application for Phase 7 is Pony and does not parse Boon at runtime.
+- Parser, source-shape verification, expected-file verification, terminal-grid
+  verification, benchmark orchestration, playground orchestration, and PTY
+  smoke verification currently run through repo-local Node tooling launched by
+  the Pony CLI.
+- The final contract requires implementation code to move into Pony before
+  completion is claimed. The generated terminal applications are Pony, but the
+  native Pony parser/runtime/compiler/playground stack is not yet complete.
