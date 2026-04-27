@@ -123,7 +123,7 @@ actor Main
     if _has_help(env) then
       Help.manifest(env)
     elseif _has_arg(env, "--check") then
-      _run_tool(env, "node tools/manifest_check.mjs")
+      NativeBoon.manifest_check_command(env)
     else
       env.err.print("error: manifest currently requires --check")
       Help.manifest(env)
@@ -419,11 +419,10 @@ actor Main
       return
     end
 
-    var command = "node tools/expected_runner.mjs verify " + target
-    if report != "" then
-      command = command + " --report " + report
+    if report == "" then
+      report = "build/reports/verify.json"
     end
-    _run_tool(env, consume command)
+    NativeBoon.verify_expected_command(env, target, report)
 
   fun _command_snapshot(env: Env) =>
     if _has_help(env) then

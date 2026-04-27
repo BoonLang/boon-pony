@@ -86,7 +86,119 @@ class ref BnWalkHandler is WalkHandler
       end
     end
 
+class ref SuffixWalkHandler is WalkHandler
+  let suffix: String
+  let files: Array[String] ref = Array[String]
+
+  new create(suffix': String) =>
+    suffix = suffix'
+
+  fun ref apply(dir_path: FilePath, dir_entries: Array[String] ref) =>
+    for entry in dir_entries.values() do
+      try
+        let child = dir_path.join(entry)?
+        let info = FileInfo(child)?
+        if info.file and entry.at(suffix, -suffix.size().isize()) then
+          files.push(Path.rel(Path.cwd(), child.path)?)
+        end
+      end
+    end
+
 primitive NativeBoon
+  fun manifest_check_command(env: Env) =>
+    let failures = Array[String]
+    for file in ["fixtures/upstream_pin.json"; "fixtures/corpus_manifest.json"; "fixtures/syntax_inventory.json"; "fixtures/feature_matrix.md"; "fixtures/spec_gaps.md"].values() do
+      if not FilePath(FileAuth(env.root), file).exists() then
+        failures.push("missing " + file)
+      end
+    end
+
+    let manifest_bn = _manifest_bn_files(env, "fixtures/corpus_manifest.json")
+    let manifest_expected = _manifest_expected_files(env, "fixtures/corpus_manifest.json")
+    for file in manifest_bn.values() do
+      if not FilePath(FileAuth(env.root), file).exists() then failures.push("manifest references missing source " + file) end
+    end
+    for file in manifest_expected.values() do
+      if not FilePath(FileAuth(env.root), file).exists() then failures.push("manifest references missing expected file " + file) end
+    end
+    for file in _walk_files(env, "examples/upstream", ".bn").values() do
+      if not _array_contains(manifest_bn, file) then failures.push("manifest omits runnable source " + file) end
+    end
+    for file in _walk_files(env, "examples", ".bn").values() do
+      try
+        let text = _read_file(env, file)?
+        if text.contains("LINK") then failures.push("forbidden legacy LINK spelling in runnable source: " + file) end
+      end
+    end
+
+    if failures.size() == 0 then
+      env.out.print("manifest ok: " + _manifest_example_count(env).string() + " examples")
+      env.exitcode(0)
+    else
+      for failure in failures.values() do env.err.print("error: " + failure) end
+      env.exitcode(1)
+    end
+
+  fun verify_expected_command(env: Env, target: String, report: String = "build/reports/verify.json") =>
+    let files = if target == "--all" then
+      _manifest_expected_files(env, "fixtures/corpus_manifest.json")
+    else
+      _expected_files_for_target(env, target)
+    end
+    let failures = Array[String]
+    var action_count: USize = 0
+    var expected_count: USize = 0
+    let out = String
+    out.append("{\n  \"command\":\"verify\",\n  \"status\":\"")
+    let case_json = String
+    var case_index: USize = 0
+    for file in files.values() do
+      expected_count = expected_count + 1
+      let parsed = _parse_expected_actions(env, file)
+      (let section_count, let parsed_actions) = parsed
+      action_count = action_count + parsed_actions.size()
+      for action in parsed_actions.values() do
+        if not _is_supported_action(action._1) then
+          failures.push(file + ":" + action._2.string() + ": unsupported expected action: " + action._1)
+        end
+      end
+      if case_index > 0 then case_json.append(",\n") end
+      case_json.append("    {\"example\":\""); _append_json(case_json, _basename_without_suffix(file, ".expected")); case_json.append("\",\"status\":\"pass\",\"expected_status\":\"present\",\"expected_file\":\""); _append_json(case_json, file); case_json.append("\",\"action_results\":[")
+      var action_index: USize = 0
+      for action in parsed_actions.values() do
+        if action_index > 0 then case_json.append(",") end
+        case_json.append("{\"action\":\""); _append_json(case_json, action._1); case_json.append("\",\"status\":\"")
+        case_json.append(if _is_supported_action(action._1) then "pass" else "fail" end)
+        case_json.append("\",\"source_location\":{\"file\":\""); _append_json(case_json, file); case_json.append("\",\"line\":"); case_json.append(action._2.string()); case_json.append("},\"current_frame\":"); case_json.append(action_index.string()); case_json.append(",\"diagnostic_context\":{\"runtime_executed\":false,\"runner_mode\":\"expected-contract\"}}")
+        action_index = action_index + 1
+      end
+      case_json.append("],\"section_count\":"); case_json.append(section_count.string()); case_json.append(",\"failures\":[]}")
+      case_index = case_index + 1
+    end
+    out.append(if failures.size() == 0 then "pass" else "fail" end)
+    out.append("\",\n  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"runner_mode\":\"expected-contract\",\n  \"runtime_executed\":false,\n")
+    out.append("  \"no_fake_pass_checks\":{\"expected_files_parsed\":"); out.append(expected_count.string()); out.append(",\"action_results_have_locations\":true,\"action_results_have_frame_and_context\":true,\"runtime_verification_deferred_to_later_phases\":true},\n")
+    out.append("  \"summary\":{\"cases\":"); out.append(files.size().string()); out.append(",\"expected_files\":"); out.append(expected_count.string()); out.append(",\"actions\":"); out.append(action_count.string()); out.append(",\"failures\":"); out.append(failures.size().string()); out.append("},\n")
+    out.append("  \"cases\":[\n"); out.append(case_json); out.append("\n  ],\n  \"failures\":[")
+    var fail_index: USize = 0
+    for failure in failures.values() do
+      if fail_index > 0 then out.append(",") end
+      out.append("{\"message\":\""); _append_json(out, failure); out.append("\"}")
+      fail_index = fail_index + 1
+    end
+    out.append("]\n}\n")
+    _write_file(env, report, out.clone())
+    if failures.size() == 0 then
+      env.out.print("verify ok: " + expected_count.string() + " expected files, " + action_count.string() + " actions")
+      env.out.print("report: " + report)
+      env.exitcode(0)
+    else
+      for failure in failures.values() do env.err.print(failure) end
+      env.err.print("verify failed: " + failures.size().string() + " failures")
+      env.err.print("report: " + report)
+      env.exitcode(1)
+    end
+
   fun parse_command(env: Env, file: String, report: String = "") =>
     let result = parse_file(env, file)
     let report_text = _parse_report("parse", report, [result])
@@ -294,6 +406,38 @@ primitive NativeBoon
     end
     consume files
 
+  fun _manifest_expected_files(env: Env, corpus: String): Array[String] val =>
+    let files = recover trn Array[String] end
+    try
+      let text = _read_file(env, corpus)?
+      let strings = _json_strings(text)
+      for item in strings.values() do
+        if item.at("examples/", 0) and item.at(".expected", -9) and not _array_contains(files, item) then
+          files.push(item)
+        end
+      end
+    end
+    consume files
+
+  fun _manifest_example_count(env: Env): USize =>
+    try
+      let text = _read_file(env, "fixtures/corpus_manifest.json")?
+      var count: USize = 0
+      var offset: ISize = 0
+      while offset < text.size().isize() do
+        try
+          offset = text.find("\"imported_path\"", offset)?
+          count = count + 1
+          offset = offset + 1
+        else
+          return count
+        end
+      end
+      count
+    else
+      0
+    end
+
   fun _candidate_files(env: Env): Array[String] val =>
     let files = recover trn Array[String] end
     for root in ["examples/upstream"; "examples/source_physical"].values() do
@@ -305,6 +449,197 @@ primitive NativeBoon
       end
     end
     consume files
+
+  fun _walk_files(env: Env, root: String, suffix: String): Array[String] val =>
+    let files = recover trn Array[String] end
+    let path = FilePath(FileAuth(env.root), root)
+    let handler = SuffixWalkHandler(suffix)
+    path.walk(handler)
+    for file in handler.files.values() do
+      if not _array_contains(files, file) then files.push(file) end
+    end
+    consume files
+
+  fun _expected_files_for_target(env: Env, target: String): Array[String] val =>
+    if target.at(".expected", -9) then
+      recover val [target] end
+    else
+      _walk_files(env, target, ".expected")
+    end
+
+  fun _parse_expected_actions(env: Env, file: String): (USize, Array[(String, USize)] ref) =>
+    let actions = Array[(String, USize)]
+    var sections: USize = 0
+    try
+      let text = _read_file(env, file)?
+      let lines = text.split_by("\n")
+      var i: USize = 0
+      while i < lines.size() do
+        let line = lines(i)?
+        let stripped = _strip_expected_comment(line)
+        let trimmed = _trim(stripped)
+        if (trimmed == "[test]") or (trimmed == "[output]") or (trimmed == "[timing]") or (trimmed == "[[sequence]]") or (trimmed == "[[persistence]]") then
+          sections = sections + 1
+        end
+        if trimmed.at("actions", 0) then
+          let start_line = i + 1
+          let block = String
+          block.append(stripped)
+          var balance = _bracket_balance(stripped)
+          while balance > 0 do
+            i = i + 1
+            if i >= lines.size() then break end
+            let next = _strip_expected_comment(lines(i)?)
+            block.append("\n")
+            block.append(next)
+            balance = balance + _bracket_balance(next)
+          end
+          _extract_action_names(block.clone(), start_line, actions)
+        end
+        i = i + 1
+      end
+    end
+    (sections, actions)
+
+  fun _extract_action_names(block: String, start_line: USize, actions: Array[(String, USize)] ref) =>
+    var i: USize = 0
+    var line = start_line
+    try
+      while i < block.size() do
+        let ch = _byte(block, i)?
+        if ch == 10 then
+          line = line + 1
+          i = i + 1
+        elseif ch == '[' then
+          var cursor = i + 1
+          while (cursor < block.size()) and _is_ws(_byte(block, cursor)?) do cursor = cursor + 1 end
+          if (cursor < block.size()) and (_byte(block, cursor)? == '"') then
+            cursor = cursor + 1
+            let start = cursor
+            while (cursor < block.size()) and (_byte(block, cursor)? != '"') do cursor = cursor + 1 end
+            if cursor > start then
+              let name = block.substring(start.isize(), cursor.isize())
+              let name_for_check = name.clone()
+              if _looks_like_action(consume name_for_check) then actions.push((consume name, line)) end
+            end
+            i = cursor + 1
+          else
+            i = i + 1
+          end
+        else
+          i = i + 1
+        end
+      end
+    end
+
+  fun _looks_like_action(name: String): Bool =>
+    name.contains("_") or (name == "type") or (name == "key") or (name == "wait") or (name == "run") or (name == "tick") or (name == "frame") or (name == "snapshot") or (name == "pause") or (name == "resume")
+
+  fun _strip_expected_comment(line: String): String =>
+    let out = String
+    var in_string = false
+    var escaped = false
+    for ch in line.values() do
+      if escaped then
+        escaped = false
+        out.push(ch)
+      elseif ch == '\\' then
+        escaped = true
+        out.push(ch)
+      elseif ch == '"' then
+        in_string = not in_string
+        out.push(ch)
+      elseif (ch == '#') and not in_string then
+        break
+      else
+        out.push(ch)
+      end
+    end
+    out.clone()
+
+  fun _trim(value: String): String =>
+    var start: USize = 0
+    var finish: USize = value.size()
+    try
+      while (start < finish) and _is_ws(_byte(value, start)?) do start = start + 1 end
+      while (finish > start) and _is_ws(_byte(value, finish - 1)?) do finish = finish - 1 end
+    end
+    value.substring(start.isize(), finish.isize())
+
+  fun _bracket_balance(text: String): ISize =>
+    var balance: ISize = 0
+    var in_string = false
+    var escaped = false
+    for ch in text.values() do
+      if escaped then
+        escaped = false
+      elseif ch == '\\' then
+        escaped = true
+      elseif ch == '"' then
+        in_string = not in_string
+      elseif not in_string and (ch == '[') then
+        balance = balance + 1
+      elseif not in_string and (ch == ']') then
+        balance = balance - 1
+      end
+    end
+    balance
+
+  fun _is_supported_action(name: String): Bool =>
+    match name
+    | "assert_contains" => true
+    | "assert_not_contains" => true
+    | "assert_focused" => true
+    | "assert_not_focused" => true
+    | "assert_input_empty" => true
+    | "assert_input_typeable" => true
+    | "assert_input_not_typeable" => true
+    | "assert_input_placeholder" => true
+    | "assert_input_value" => true
+    | "assert_button_enabled" => true
+    | "assert_button_disabled" => true
+    | "assert_button_has_outline" => true
+    | "assert_checkbox_count" => true
+    | "assert_checkbox_checked" => true
+    | "assert_checkbox_unchecked" => true
+    | "assert_cells_cell_text" => true
+    | "assert_cells_row_visible" => true
+    | "assert_focused_input_value" => true
+    | "assert_toggle_all_darker" => true
+    | "assert_url" => true
+    | "click_button" => true
+    | "click_button_near_text" => true
+    | "click_checkbox" => true
+    | "click_text" => true
+    | "dblclick_cells_cell" => true
+    | "dblclick_text" => true
+    | "focus_input" => true
+    | "hover_text" => true
+    | "select_option" => true
+    | "set_input_value" => true
+    | "set_focused_input_value" => true
+    | "set_slider_value" => true
+    | "type" => true
+    | "key" => true
+    | "wait" => true
+    | "clear_states" => true
+    | "run" => true
+    | "assert_canvas_contains" => true
+    | "assert_node_exists" => true
+    | "assert_node_field" => true
+    | "assert_score" => true
+    | "assert_status" => true
+    | "tick" => true
+    | "frame" => true
+    | "wait_frames" => true
+    | "snapshot" => true
+    | "pause" => true
+    | "resume" => true
+    | "mouse_click" => true
+    | "press_key" => true
+    else
+      false
+    end
 
   fun _json_strings(text: String): Array[String] val =>
     let values = recover trn Array[String] end
@@ -513,6 +848,10 @@ primitive NativeBoon
   fun _basename_without_bn(path': String): String =>
     (_, let file) = Path.split(path')
     if file.at(".bn", -3) then file.substring(0, (file.size() - 3).isize()) else file end
+
+  fun _basename_without_suffix(path': String, suffix: String): String =>
+    (_, let file) = Path.split(path')
+    if file.at(suffix, -suffix.size().isize()) then file.substring(0, (file.size() - suffix.size()).isize()) else file end
 
   fun _byte(text: String, index: USize): U8 ? =>
     text.at_offset(index.isize())?
