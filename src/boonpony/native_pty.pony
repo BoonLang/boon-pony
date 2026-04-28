@@ -56,7 +56,7 @@ primitive NativePty
       _send_key(session, "S-Right") +
       _send_key(session, "Enter") + _send_key(session, "BSpace") + _send_literal(session, "7") + _send_key(session, "Enter") +
       _send_key(session, "S-Right") +
-      _send_mouse(session, "44", "1") + _send_literal(session, "a") +
+      _send_mouse(session, "56", "2") + _send_literal(session, "a") +
       _send_key(session, "S-Right") + _send_key(session, "Enter") +
       _send_key(session, "S-Right") +
       _send_key(session, "S-Right") + _send_literal(session, "c") + _send_literal(session, "f") +

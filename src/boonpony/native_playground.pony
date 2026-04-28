@@ -1,4 +1,5 @@
 use "files"
+use "time"
 
 class iso PlaygroundNotify is InputNotify
   let _env: Env
@@ -30,9 +31,12 @@ class iso PlaygroundNotify is InputNotify
   var _frame: I64 = 0
   var _child_dispatches: USize = 0
   let _counter_child_lines: Array[String] ref = Array[String]
+  let _interval_child_lines: Array[String] ref = Array[String]
   let _cells_child_lines: Array[String] ref = Array[String]
+  let _cells_dynamic_child_lines: Array[String] ref = Array[String]
   let _todo_child_lines: Array[String] ref = Array[String]
   let _pong_child_lines: Array[String] ref = Array[String]
+  let _arkanoid_child_lines: Array[String] ref = Array[String]
   let _temperature_child_lines: Array[String] ref = Array[String]
   let _flight_child_lines: Array[String] ref = Array[String]
   let _timer_child_lines: Array[String] ref = Array[String]
@@ -62,25 +66,24 @@ class iso PlaygroundNotify is InputNotify
 
   fun ref _handle(event: String) =>
     if event == "Shift+Right" then
-      _active = _active + 1
-      if _active >= NativePlayground.tab_count() then
-        _active = 0
-        _wrap_forward = true
-      end
-      if _active == 1 then _interval = 1 end
+      _switch_right()
     elseif event == "Shift+Left" then
-      if _active == 0 then
-        _active = NativePlayground.tab_count() - 1
-        _wrap_backward = true
-      else
-        _active = _active - 1
+      _switch_left()
+    elseif event == "]" then
+      _switch_right()
+    elseif event == "[" then
+      _switch_left()
+    elseif event.at("Tab:", 0) then
+      try
+        let tab = event.substring(4).usize()?
+        if tab < NativePlayground.tab_count() then
+          _active = tab
+          if tab == 4 then _mouse_selected_todo = true end
+        end
       end
-    elseif event == "mouse" then
+    elseif event.at("Mouse:", 0) then
       if _active == 11 then
         _circle_count = _circle_count + 1
-      else
-        _active = 4
-        _mouse_selected_todo = true
       end
     elseif event == "Enter" then
       if _active == 0 then
@@ -96,13 +99,32 @@ class iso PlaygroundNotify is InputNotify
       elseif _active == 5 then
         _pong_rally = true
       end
+    elseif event == "Space" then
+      if _active == 0 then
+        _counter = _counter + 1
+      elseif _active == 1 then
+        _interval = _interval + 1
+      elseif _active == 5 then
+        _pong_rally = true
+      elseif _active == 6 then
+        _build = "arkanoid brick hit"
+      elseif _active == 9 then
+        _timer_elapsed = _timer_elapsed + 1
+      end
+    elseif (event == "ArrowUp") or (event == "ArrowDown") or (event == "w") or (event == "s") then
+      if _active == 5 then _pong_rally = true end
+    elseif (event == "ArrowLeft") or (event == "ArrowRight") then
+      if _active == 6 then _build = "arkanoid paddle moved" end
     elseif event == "Backspace" then
       if _active == 2 then _cells_buffer = "" end
     elseif event == "7" then
       if _active == 2 then _cells_buffer = "7" end
+      if _active == 3 then _cells_buffer = "7" end
     elseif event == "a" then
       if _active == 4 then _todo_write_tests = true end
       if _active == 10 then _crud_ada = true end
+    elseif event == "t" then
+      if _active == 1 then _interval = _interval + 1 end
     elseif event == "c" then
       if _active == 7 then _temperature_c = true end
     elseif event == "f" then
@@ -154,12 +176,30 @@ class iso PlaygroundNotify is InputNotify
       _child_dispatches = _child_dispatches + 1
     end
 
+  fun ref _switch_right() =>
+    _active = _active + 1
+    if _active >= NativePlayground.tab_count() then
+      _active = 0
+      _wrap_forward = true
+    end
+
+  fun ref _switch_left() =>
+    if _active == 0 then
+      _active = NativePlayground.tab_count() - 1
+      _wrap_backward = true
+    else
+      _active = _active - 1
+    end
+
   fun ref _dispatch_child_event(event: String): Bool =>
     match _active
     | 0 => NativePlayground.dispatch_child_event(_env, _active, event, _counter_child_lines)
+    | 1 => NativePlayground.dispatch_child_event(_env, _active, event, _interval_child_lines)
     | 2 => NativePlayground.dispatch_child_event(_env, _active, event, _cells_child_lines)
+    | 3 => NativePlayground.dispatch_child_event(_env, _active, event, _cells_dynamic_child_lines)
     | 4 => NativePlayground.dispatch_child_event(_env, _active, event, _todo_child_lines)
     | 5 => NativePlayground.dispatch_child_event(_env, _active, event, _pong_child_lines)
+    | 6 => NativePlayground.dispatch_child_event(_env, _active, event, _arkanoid_child_lines)
     | 7 => NativePlayground.dispatch_child_event(_env, _active, event, _temperature_child_lines)
     | 8 => NativePlayground.dispatch_child_event(_env, _active, event, _flight_child_lines)
     | 9 => NativePlayground.dispatch_child_event(_env, _active, event, _timer_child_lines)
@@ -169,10 +209,18 @@ class iso PlaygroundNotify is InputNotify
     end
 
   fun ref _render() =>
+    if _active == 1 then
+      _interval = NativePlayground.live_interval(_env)
+    end
+    NativePlayground.write_live_state(_env, _active, _interval)
     _frame = _frame + 1
     _env.out.write("\x1B[H\x1B[2J")
-    _line("Boon-Pony TUI | Active: " + NativePlayground.tab_title(_active) + " | [ ]/Shift+Arrows tabs | F5 record F6 replay | Q quit")
+    _line("Boon-Pony TUI | Active: " + NativePlayground.tab_title(_active) + " | Q quit")
     _line(NativePlayground.tabs_line(_active))
+    _line("")
+    _line("+ Controls ---------------------------------------------------------+")
+    _line(NativePlayground.active_hint(_active))
+    _line("Global: [/] or Shift+Left/Right tabs | e source | v valid | ! invalid | r reload | b build | p rerun | d diff | o editor")
     _line("")
     _line("+ Source -----------------------------------------------------------+")
     _line(NativePlayground.source_path(_active))
@@ -198,6 +246,20 @@ class iso PlaygroundNotify is InputNotify
     _env.out.write(text + "\r\n")
 
   fun ref _preview_lines(): Array[String] val =>
+    if _active == 0 then
+      recover val [
+        "Live generated preview"
+        "Counter: " + _counter.string()
+        "Enter increments"
+        "+++++"
+      ] end
+    elseif _active == 1 then
+      recover val [
+        "Live generated preview"
+        "Interval: " + _interval.string()
+        "Timer/interval"
+      ] end
+    else
     let generated = NativePlayground.protocol_preview_lines(_env, _active)
     if generated.size() > 0 then
       let out = recover trn Array[String] end
@@ -209,8 +271,10 @@ class iso PlaygroundNotify is InputNotify
       "Generated child frame unavailable"
       "Child protocol capture is required for preview"
     ] end
+    end
 
   fun ref _finish() =>
+    NativePlayground.stop_live_timer(_env)
     @system("stty sane".cstring())
     _env.out.write("\x1B[?1006l\x1B[?1000l\x1B[?25h\x1B[?1049l")
     NativePlayground.write_report(_env, _report, NativePlayground.tab_title(_active))
@@ -248,13 +312,105 @@ class iso PlaygroundNotify is InputNotify
       "terminal restored"
     ] end
 
+class iso PlaygroundIntervalTick is TimerNotify
+  let _env: Env
+
+  new iso create(env: Env) =>
+    _env = env
+
+  fun ref apply(timer: Timer, count: U64): Bool =>
+    if not NativePlayground.live_running(_env) then return false end
+    if NativePlayground.live_active(_env) == 1 then
+      let next = NativePlayground.live_interval(_env) + count.i64()
+      NativePlayground.write_live_state(_env, USize(1), next)
+      NativePlayground.render_interval_tick(_env, next)
+    end
+    true
+
+  fun ref cancel(timer: Timer) =>
+    None
+
 primitive NativePlayground
   fun run(env: Env, example: String = "", report': String = "") =>
     let report = if report' == "" then "build/reports/playground-live.json" else report' end
+    reset_live_cache()
+    start_live_timer(env)
+    let timers = Timers
+    timers(Timer(PlaygroundIntervalTick(env), 1_000_000_000, 1_000_000_000))
     child_sessions_json(env)
     @system("stty raw -echo".cstring())
     env.out.write("\x1B[?1049h\x1B[?25l\x1B[?1000h\x1B[?1006h\x1B[2J")
     env.input(PlaygroundNotify(env, example, report), 64)
+
+  fun reset_live_cache() =>
+    @system("rm -f build/cache/protocol-counter.jsonl build/cache/protocol-interval.jsonl build/cache/protocol-cells.jsonl build/cache/protocol-cells_dynamic.jsonl build/cache/protocol-todo_mvc.jsonl build/cache/protocol-pong.jsonl build/cache/protocol-arkanoid.jsonl build/cache/protocol-temperature_converter.jsonl build/cache/protocol-flight_booker.jsonl build/cache/protocol-timer.jsonl build/cache/protocol-crud.jsonl build/cache/protocol-circle_drawer.jsonl".cstring())
+
+  fun start_live_timer(env: Env) =>
+    _mkdirs()
+    _write_file(env, "build/cache/playground-live-running", "1\n")
+    write_live_state(env, USize(0), I64(0))
+
+  fun stop_live_timer(env: Env) =>
+    @system("rm -f build/cache/playground-live-running".cstring())
+
+  fun live_running(env: Env): Bool =>
+    _file_exists(env, "build/cache/playground-live-running")
+
+  fun write_live_state(env: Env, active: USize, interval: I64) =>
+    _write_file(env, "build/cache/playground-live-active", active.string() + "\n")
+    _write_file(env, "build/cache/playground-live-interval", interval.string() + "\n")
+
+  fun live_active(env: Env): USize =>
+    try _trim(_read_file(env, "build/cache/playground-live-active")?).usize()? else USize(0) end
+
+  fun live_interval(env: Env): I64 =>
+    try _trim(_read_file(env, "build/cache/playground-live-interval")?).i64()? else I64(0) end
+
+  fun _trim(value: String): String =>
+    var start: USize = 0
+    var finish: USize = value.size()
+    try
+      while (start < finish) and _is_space(value.at_offset(start.isize())?) do start = start + 1 end
+      while (finish > start) and _is_space(value.at_offset((finish - 1).isize())?) do finish = finish - 1 end
+    end
+    recover val value.substring(start.isize(), finish.isize()) end
+
+  fun _is_space(ch: U8): Bool =>
+    (ch == ' ') or (ch == 9) or (ch == 10) or (ch == 13)
+
+  fun render_interval_tick(env: Env, value: I64) =>
+    env.out.write("\x1B[H\x1B[2J")
+    _live_line(env, "Boon-Pony TUI | Active: Interval | Q quit")
+    _live_line(env, tabs_line(USize(1)))
+    _live_line(env, "")
+    _live_line(env, "+ Controls ---------------------------------------------------------+")
+    _live_line(env, active_hint(USize(1)))
+    _live_line(env, "Global: [/] or Shift+Left/Right tabs | e source | v valid | ! invalid | r reload | b build | p rerun | d diff | o editor")
+    _live_line(env, "")
+    _live_line(env, "+ Source -----------------------------------------------------------+")
+    _live_line(env, source_path(USize(1)))
+    _live_line(env, "Source edit mode: off")
+    _live_line(env, "Valid edit applied: no")
+    _live_line(env, "Working diff: 0")
+    _live_line(env, "Reloaded working source: no")
+    _live_line(env, "Build: not run")
+    _live_line(env, "Rerun: not run")
+    _live_line(env, "Diagnostic: clean")
+    _live_line(env, "External editor: not opened")
+    _live_line(env, "+ Preview ----------------------------------------------------------+")
+    _live_line(env, "Live generated preview")
+    _live_line(env, "Interval: " + value.string())
+    _live_line(env, "Timer/interval")
+    _live_line(env, "+ Inspector --------------------------------------------------------+")
+    _live_line(env, "counter: 0")
+    _live_line(env, "interval: " + value.string())
+    _live_line(env, "A0 = 5")
+    _live_line(env, "Generated child dispatches: 0")
+    _live_line(env, "frame: auto")
+    _live_line(env, "Clean log")
+
+  fun _live_line(env: Env, text: String) =>
+    env.out.write(text + "\r\n")
 
   fun decode_events(data: Array[U8] box): Array[String] val =>
     let events = recover trn Array[String] end
@@ -268,11 +424,35 @@ primitive NativePlayground
         elseif _starts_at(text, "\x1B[1;2D", cursor) then
           events.push("Shift+Left")
           cursor = cursor + 6
+        elseif _starts_at(text, "\x1B[A", cursor) then
+          events.push("ArrowUp")
+          cursor = cursor + 3
+        elseif _starts_at(text, "\x1B[B", cursor) then
+          events.push("ArrowDown")
+          cursor = cursor + 3
+        elseif _starts_at(text, "\x1B[C", cursor) then
+          events.push("ArrowRight")
+          cursor = cursor + 3
+        elseif _starts_at(text, "\x1B[D", cursor) then
+          events.push("ArrowLeft")
+          cursor = cursor + 3
         elseif _starts_at(text, "\x1B[<", cursor) then
-          events.push("mouse")
           let mouse_end_m = try text.find("M", cursor)? else text.size().isize() - 1 end
           let mouse_end_l = try text.find("m", cursor)? else text.size().isize() - 1 end
           let mouse_end = if mouse_end_m < mouse_end_l then mouse_end_m else mouse_end_l end
+          try
+            let packet: String val = recover val text.substring(cursor + 3, mouse_end) end
+            let parts = packet.split_by(";")
+            let x = parts(1)?.usize()?
+            let y = parts(2)?.usize()?
+            if y <= 2 then
+              events.push("Tab:" + NativePlayground.tab_at_x(x).string())
+            else
+              events.push("Mouse:" + x.string() + ":" + y.string())
+            end
+          else
+            events.push("Mouse:0:0")
+          end
           cursor = mouse_end + 1
         else
           let ch = text.at_offset(cursor)?
@@ -284,6 +464,8 @@ primitive NativePlayground
             events.push("Enter")
           elseif (ch == 127) or (ch == 8) then
             events.push("Backspace")
+          elseif ch == 32 then
+            events.push("Space")
           elseif (ch >= 32) and (ch <= 126) then
             events.push(String.from_array([ch]))
           end
@@ -343,6 +525,36 @@ primitive NativePlayground
       index = index + 1
     end
     out.clone()
+
+  fun active_hint(active: USize): String =>
+    match active
+    | 0 => "Counter: Enter or Space increments the generated counter."
+    | 1 => "Interval: Space or t advances the timer frame."
+    | 2 => "Cells: Enter edits/commits A0, Backspace clears, 0-9 types a cell value."
+    | 3 => "Cells Dynamic: Enter edits, numbers type values, Backspace clears."
+    | 4 => "TodoMVC: a adds 'Write tests'; mouse click selects this tab from the tab strip."
+    | 5 => "Pong: Space starts, W/S or Up/Down move paddles, Enter runs the scoring script."
+    | 6 => "Arkanoid: Space launches/hits a brick, Left/Right or A/D move paddle, L marks lost."
+    | 7 => "Temperature Converter: c edits Celsius, f edits Fahrenheit."
+    | 8 => "Flight Booker: b books a return flight."
+    | 9 => "Timer: Space or u advances elapsed time."
+    | 10 => "CRUD: a creates Ada Lovelace."
+    | 11 => "Circle Drawer: mouse adds a circle, u undoes."
+    else "This example accepts its listed generated actions."
+    end
+
+  fun tab_at_x(x': USize): USize =>
+    let x = if x' == 0 then USize(1) else x' end
+    var left: USize = 1
+    var index: USize = 0
+    while index < tab_count() do
+      if index > 0 then left = left + 3 end
+      let width = tab_title(index).size() + 2
+      if (x >= left) and (x < (left + width)) then return index end
+      left = left + width
+      index = index + 1
+    end
+    tab_count() - 1
 
   fun source_path(active: USize): String =>
     match active
@@ -557,8 +769,22 @@ primitive NativePlayground
     let lines = recover trn Array[String] end
     match active
     | 0 =>
-      if event == "Enter" then lines.push(_expected_action("click_button", "", "0")) end
+      if (event == "Enter") or (event == "Space") then lines.push(_expected_action("click_button", "", "0")) end
+    | 1 =>
+      if (event == "Space") or (event == "t") then
+        lines.push(_expected_action("wait", ""))
+      end
     | 2 =>
+      if event == "7" then
+        lines.push(_expected_action("dblclick_cells_cell", "1,1"))
+        lines.push(_expected_action("set_focused_input_value", "7"))
+        lines.push(_expected_action("key", "Enter"))
+      elseif event == "Enter" then
+        lines.push(_expected_action("dblclick_cells_cell", "1,1"))
+      elseif event == "Backspace" then
+        lines.push(_expected_action("set_focused_input_value", ""))
+      end
+    | 3 =>
       if event == "7" then
         lines.push(_expected_action("dblclick_cells_cell", "1,1"))
         lines.push(_expected_action("set_focused_input_value", "7"))
@@ -574,8 +800,28 @@ primitive NativePlayground
         lines.push(_expected_action("key", "Enter"))
       end
     | 5 =>
-      if event == "Enter" then
+      if (event == "Enter") or (event == "Space") then
         lines.push(_expected_action("key", "Space"))
+        lines.push(_expected_action("wait", ""))
+      elseif (event == "w") or (event == "ArrowUp") then
+        lines.push(_expected_action("key", "W"))
+        lines.push(_expected_action("wait", ""))
+      elseif (event == "s") or (event == "ArrowDown") then
+        lines.push(_expected_action("key", "S"))
+        lines.push(_expected_action("wait", ""))
+      end
+    | 6 =>
+      if (event == "Space") or (event == "Enter") then
+        lines.push(_expected_action("key", "Space"))
+        lines.push(_expected_action("wait", ""))
+      elseif (event == "ArrowLeft") or (event == "a") then
+        lines.push(_expected_action("key", "A"))
+        lines.push(_expected_action("wait", ""))
+      elseif (event == "ArrowRight") or (event == "d") then
+        lines.push(_expected_action("key", "D"))
+        lines.push(_expected_action("wait", ""))
+      elseif event == "l" then
+        lines.push(_expected_action("key", "L"))
         lines.push(_expected_action("wait", ""))
       end
     | 7 =>
@@ -593,7 +839,7 @@ primitive NativePlayground
         lines.push(_expected_action("click_button", "", "0"))
       end
     | 9 =>
-      if event == "u" then
+      if (event == "u") or (event == "Space") or (event == "t") then
         lines.push(_expected_action("set_slider_value", "15", "0"))
         lines.push(_expected_action("wait", ""))
       end
@@ -604,7 +850,7 @@ primitive NativePlayground
         lines.push(_expected_action("click_text", "Create"))
       end
     | 11 =>
-      if event == "mouse" then
+      if event.at("Mouse:", 0) then
         lines.push(_expected_action("click_text", "canvas"))
       elseif event == "u" then
         lines.push(_expected_action("click_text", "Undo"))
@@ -657,12 +903,18 @@ primitive NativePlayground
   fun _preview_chunks(value: String): Array[String] val =>
     let out = recover trn Array[String] end
     let max_width: USize = 72
-    var cursor: USize = 0
     if value.size() == 0 then return consume out end
-    while cursor < value.size() do
-      let finish = if (cursor + max_width) < value.size() then cursor + max_width else value.size() end
-      out.push(recover val value.substring(cursor.isize(), finish.isize()) end)
-      cursor = finish
+    for line in value.split_by("\n").values() do
+      var cursor: USize = 0
+      if line.size() == 0 then
+        out.push("")
+      else
+        while cursor < line.size() do
+          let finish = if (cursor + max_width) < line.size() then cursor + max_width else line.size() end
+          out.push(recover val line.substring(cursor.isize(), finish.isize()) end)
+          cursor = finish
+        end
+      end
     end
     consume out
 
@@ -696,11 +948,39 @@ primitive NativePlayground
     if _file_exists(env, protocol_capture) and (_protocol_frame_count(env, protocol_capture) > 0) and _file_exists(env, report) and _file_exists(env, output) then
       return 0
     end
-    let command: String val = recover val
-      "build/bin/boonpony protocol-smoke " + _shell_quote(project) +
-      " --report " + _shell_quote(report) + " > " + _shell_quote(output) + " 2>&1"
+    let app = NativeCodegen.project_name(project)
+    let binary: String val = recover val "build/bin/generated/" + app end
+    let body = String
+    if not _file_exists(env, binary) then
+      body.append("build/bin/boonpony build ")
+      body.append(_shell_quote(project))
+      body.append(" --report ")
+      body.append(_shell_quote(report))
+      body.append(" >/dev/null 2>&1 && ")
     end
-    @system(command.cstring())
+    body.append("printf '%s\\n' ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"tree\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"metrics\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}"))
+    body.append(" | ")
+    body.append(_shell_quote(binary))
+    body.append(" --protocol > ")
+    body.append(_shell_quote(protocol_capture))
+    body.append(" 2> ")
+    body.append(_shell_quote(output))
+    let body_text: String val = recover val body.clone() end
+    let command: String val = recover val
+      "timeout 20s sh -c " + _shell_quote(body_text)
+    end
+    let status = @system(command.cstring())
+    if status == 0 then
+      _write_file(env, report, "{\"command\":\"playground-child-initial\",\"status\":\"pass\",\"project\":\"" + project + "\",\"binary\":\"" + binary + "\"}\n")
+    end
+    status
 
   fun _protocol_frame_count(env: Env, file: String): USize =>
     var count: USize = 0

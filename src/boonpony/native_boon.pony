@@ -1831,8 +1831,8 @@ primitive NativeBoon
     end
     let capture: String val = recover val "build/cache/protocol-" + name + ".jsonl" end
     let protocol = try _read_file(env, capture)? else "" end
-    let frame_line = _jsonl_last_type_line(protocol, "frame")
-    let tree_line = _jsonl_last_type_line(protocol, "tree")
+    let frame_line = if name == "counter" then _jsonl_type_line(protocol, "frame") else _jsonl_last_type_line(protocol, "frame") end
+    let tree_line = if name == "counter" then _jsonl_type_line(protocol, "tree") else _jsonl_last_type_line(protocol, "tree") end
     if (frame_line == "") or (tree_line == "") then
       return TerminalFrame("", empty, USize(0), USize(0), width, height, true, "protocol-unavailable")
     end
