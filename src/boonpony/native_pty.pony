@@ -4,7 +4,7 @@ primitive NativePty
   fun verify_command(env: Env, report': String = "") =>
     let report = if report' == "" then "build/reports/verify-pty.json" else report' end
     _mkdirs()
-    let cases = Array[(String, String, Array[String] val)]
+    let cases = Array[(String, String, String, Array[String] val, Array[String] val)]
     cases.push(_run_pong(env))
     cases.push(_run_arkanoid(env))
     cases.push(_run_playground(env))
@@ -24,7 +24,7 @@ primitive NativePty
       env.exitcode(1)
     end
 
-  fun _run_pong(env: Env): (String, String, Array[String] val) =>
+  fun _run_pong(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-pong.out"
     let session = "boonpony_native_pty_pong"
     let command = _pty_prefix(session, "100", "32", "build/bin/boonpony play examples/terminal/pong") +
@@ -34,7 +34,7 @@ primitive NativePty
       _capture(session, out)
     _run_case(env, "pong", consume command, out, recover val ["terminal restored"; "final score 1 : 0"; "__EXIT:0"] end)
 
-  fun _run_arkanoid(env: Env): (String, String, Array[String] val) =>
+  fun _run_arkanoid(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-arkanoid.out"
     let session = "boonpony_native_pty_arkanoid"
     let command = _pty_prefix(session, "100", "34", "build/bin/boonpony play examples/terminal/arkanoid") +
@@ -46,11 +46,11 @@ primitive NativePty
       _capture(session, out)
     _run_case(env, "arkanoid", consume command, out, recover val ["final status Playing"; "terminal restored"; "__EXIT:0"] end)
 
-  fun _run_playground(env: Env): (String, String, Array[String] val) =>
+  fun _run_playground(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground.out"
     let session = "boonpony_native_pty_playground"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui") +
-      _wait(session, "Counter: 0") +
+      _wait(session, "Active: Counter") +
       _send_key(session, "Enter") +
       _send_key(session, "S-Right") +
       _send_key(session, "S-Right") +
@@ -69,7 +69,7 @@ primitive NativePty
       _capture(session, out)
     _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Cells A0: 7"; "TodoMVC Write tests: yes"; "Pong rally: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
 
-  fun _run_source_edit(env: Env): (String, String, Array[String] val) =>
+  fun _run_source_edit(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-source-edit.out"
     let session = "boonpony_native_pty_source"
     let command = _pty_prefix(session, "132", "40", "export EDITOR=true; export BOONPONY_OPEN_EDITOR=1; build/bin/boonpony tui --example pong") +
@@ -78,9 +78,9 @@ primitive NativePty
       _send_literal(session, "b") + _send_literal(session, "p") + _send_literal(session, "!") + _send_literal(session, "o") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "source-edit", consume command, out, recover val ["Source edit mode: on"; "Diagnostics: invalid source marker"; "Build: passed"; "Rerun: Pong preview restarted"; "External editor: true completed"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "source-edit", consume command, out, recover val ["Source edit mode: on"; "Diagnostics: invalid source marker"; "Build: passed"; "Rerun: Pong preview restarted"; "Source edit generated frames: 2"; "External editor: true completed"; "terminal restored"; "__EXIT:0"] end)
 
-  fun _run_case(env: Env, name: String, command: String box, output_file: String, needles: Array[String] val): (String, String, Array[String] val) =>
+  fun _run_case(env: Env, name: String, command: String box, output_file: String, needles: Array[String] val): (String, String, String, Array[String] val, Array[String] val) =>
     let status = _system_status(command)
     let output = _clean(try _read_file(env, output_file)? else "" end)
     let missing = recover trn Array[String] end
@@ -89,37 +89,42 @@ primitive NativePty
       if not output.contains(needle) then missing.push(needle) end
     end
     let final_status = if missing.size() == 0 then "pass" else "fail" end
-    (name, final_status, consume missing)
+    (name, final_status, output_file, needles, consume missing)
 
   fun _pty_prefix(session: String, width: String, height: String, inner: String): String =>
     "tmux kill-session -t " + _shell_quote(session) + " 2>/dev/null || true; " +
     "tmux new-session -d -s " + _shell_quote(session) + " -x " + width + " -y " + height + " " +
-    _shell_quote("bash -lc 'export PATH=/home/martinkavik/.local/share/ponyup/bin:$PATH; " + inner + "; code=$?; echo __EXIT:$code; sleep 1'") + "; "
+    _shell_quote("bash -lc '" + inner + "; code=$?; echo __EXIT:$code; sleep 1'") + "; "
 
   fun _wait(session: String, needle: String): String =>
-    "for i in $(seq 1 100); do tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q " + _shell_quote(needle) + " && break; sleep 0.05; done; "
+    "for i in $(seq 1 200); do tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q " + _shell_quote(needle) + " && break; sleep 0.05; done; "
+    + "sleep 0.20; "
 
   fun _send_key(session: String, key: String): String =>
-    "tmux send-keys -t " + _shell_quote(session) + " " + _shell_quote(key) + "; sleep 0.12; "
+    "tmux send-keys -t " + _shell_quote(session) + " " + _shell_quote(key) + "; sleep 0.20; "
 
   fun _send_literal(session: String, text: String): String =>
-    "tmux send-keys -t " + _shell_quote(session) + " -l " + _shell_quote(text) + "; sleep 0.12; "
+    "tmux send-keys -t " + _shell_quote(session) + " -l " + _shell_quote(text) + "; sleep 0.20; "
 
   fun _send_mouse(session: String, x: String, y: String): String =>
-    "printf '\\033[<0;" + x + ";" + y + "M' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.12; "
+    "printf '\\033[<0;" + x + ";" + y + "M' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
 
   fun _capture(session: String, output_file: String): String =>
     "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(output_file) + "; " +
     "tmux kill-session -t " + _shell_quote(session) + " 2>/dev/null || true"
 
-  fun _report(cases: Array[(String, String, Array[String] val)] box, failures: Array[String] box): String =>
+  fun _report(cases: Array[(String, String, String, Array[String] val, Array[String] val)] box, failures: Array[String] box): String =>
     let out = String
     out.append("{\n  \"command\":\"verify-pty\",\n  \"status\":\""); out.append(if failures.size() == 0 then "pass" else "fail" end); out.append("\",\n")
     out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"cases\":[")
     var index: USize = 0
     for item in cases.values() do
       if index > 0 then out.append(",") end
-      out.append("{\"name\":\""); _append_json(out, item._1); out.append("\",\"status\":\""); out.append(item._2); out.append("\",\"missing\":"); out.append(_strings_json(item._3)); out.append("}")
+      out.append("{\"name\":\""); _append_json(out, item._1); out.append("\",\"status\":\""); out.append(item._2); out.append("\",")
+      out.append("\"pty_backend\":\"tmux\",\"output_file\":\""); _append_json(out, item._3); out.append("\",")
+      out.append("\"evidence_checked\":"); out.append(_strings_json(item._4)); out.append(",")
+      out.append("\"terminal_restored_observed\":"); out.append(if _array_contains(item._4, "terminal restored") and (not _array_contains(item._5, "terminal restored")) then "true" else "false" end); out.append(",")
+      out.append("\"missing\":"); out.append(_strings_json(item._5)); out.append("}")
       index = index + 1
     end
     out.append("],\n  \"failures\":"); out.append(_strings_json(failures)); out.append("\n}\n")
@@ -136,6 +141,12 @@ primitive NativePty
     end
     out.append("]")
     out.clone()
+
+  fun _array_contains(items: Array[String] box, value: String): Bool =>
+    for item in items.values() do
+      if item == value then return true end
+    end
+    false
 
   fun _clean(text: String): String =>
     let out = String

@@ -1,0 +1,6 @@
+sources: [
+  keyboard: [event: [key_down: SOURCE]]
+  keyboard: [event: [key_down: SOURCE]]
+]
+
+document: Terminal/canvas(width: 80, height: 24, items: LIST {})

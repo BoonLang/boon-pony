@@ -1,0 +1,3 @@
+sources: [SOURCE]
+
+document: Terminal/canvas(width: 80, height: 24, items: LIST {})

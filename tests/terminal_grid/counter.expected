@@ -4,4 +4,8 @@ contains = [
   "Counter: 0",
   "Enter increments"
 ]
+semantic_ids = [
+  "counter.canvas",
+  "counter.label"
+]
 max_changed_cells_after_first_frame = 0

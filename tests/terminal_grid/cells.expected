@@ -6,4 +6,11 @@ contains = [
   "B1 15",
   "C1 30"
 ]
+semantic_ids = [
+  "cells.canvas",
+  "cells.title",
+  "cells.A1",
+  "cells.B1",
+  "cells.C1"
+]
 max_changed_cells_after_first_frame = 0

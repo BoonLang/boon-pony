@@ -4,4 +4,8 @@ contains = [
   "Interval: 2",
   "Timer/interval"
 ]
+semantic_ids = [
+  "interval.canvas",
+  "interval.value"
+]
 max_changed_cells_after_first_frame = 1
