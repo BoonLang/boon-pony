@@ -11,6 +11,9 @@ class iso PlaygroundNotify is InputNotify
   var _cells_editing: Bool = false
   var _cells_buffer: String = ""
   var _todo_write_tests: Bool = false
+  var _todo_focus: Bool = false
+  var _todo_buffer: String = ""
+  var _todo_item: String = ""
   var _mouse_selected_todo: Bool = false
   var _pong_rally: Bool = false
   var _temperature_c: Bool = false
@@ -26,6 +29,7 @@ class iso PlaygroundNotify is InputNotify
   var _diff_lines: I64 = 0
   var _diagnostic: String = "clean"
   var _build: String = "not run"
+  var _arkanoid_status: String = "idle"
   var _rerun: String = "not run"
   var _editor: String = "not opened"
   var _frame: I64 = 0
@@ -78,13 +82,18 @@ class iso PlaygroundNotify is InputNotify
         let tab = event.substring(4).usize()?
         if tab < NativePlayground.tab_count() then
           _active = tab
+          _todo_focus = false
           if tab == 4 then _mouse_selected_todo = true end
         end
       end
     elseif event.at("Mouse:", 0) then
-      if _active == 11 then
+      if _active == 4 then
+        _todo_focus = true
+      elseif _active == 11 then
         _circle_count = _circle_count + 1
       end
+    elseif (_active == 4) and _todo_focus then
+      _handle_todo_input(event)
     elseif event == "Enter" then
       if _active == 0 then
         _counter = _counter + 1
@@ -107,21 +116,21 @@ class iso PlaygroundNotify is InputNotify
       elseif _active == 5 then
         _pong_rally = true
       elseif _active == 6 then
-        _build = "arkanoid brick hit"
+        _arkanoid_status = "brick hit"
       elseif _active == 9 then
         _timer_elapsed = _timer_elapsed + 1
       end
     elseif (event == "ArrowUp") or (event == "ArrowDown") or (event == "w") or (event == "s") then
       if _active == 5 then _pong_rally = true end
     elseif (event == "ArrowLeft") or (event == "ArrowRight") then
-      if _active == 6 then _build = "arkanoid paddle moved" end
+      if _active == 6 then _arkanoid_status = "paddle moved" end
     elseif event == "Backspace" then
       if _active == 2 then _cells_buffer = "" end
     elseif event == "7" then
       if _active == 2 then _cells_buffer = "7" end
       if _active == 3 then _cells_buffer = "7" end
     elseif event == "a" then
-      if _active == 4 then _todo_write_tests = true end
+      if _active == 4 then _commit_todo("Write tests") end
       if _active == 10 then _crud_ada = true end
     elseif event == "t" then
       if _active == 1 then _interval = _interval + 1 end
@@ -176,7 +185,32 @@ class iso PlaygroundNotify is InputNotify
       _child_dispatches = _child_dispatches + 1
     end
 
+  fun ref _handle_todo_input(event: String) =>
+    if event == "Enter" then
+      _commit_todo(_todo_buffer)
+      _todo_buffer = ""
+      _todo_focus = false
+    elseif event == "Backspace" then
+      if _todo_buffer.size() > 0 then
+        _todo_buffer = recover val _todo_buffer.substring(0, (_todo_buffer.size() - 1).isize()) end
+      end
+    elseif event == "Space" then
+      _todo_buffer = _todo_buffer + " "
+    elseif event.size() == 1 then
+      _todo_buffer = _todo_buffer + event
+    end
+
+  fun ref _commit_todo(value: String) =>
+    if value != "" then
+      _todo_item = value
+      if value == "Write tests" then _todo_write_tests = true end
+      if NativePlayground.dispatch_child_event(_env, USize(4), "TodoCommit:" + value, _todo_child_lines) then
+        _child_dispatches = _child_dispatches + 1
+      end
+    end
+
   fun ref _switch_right() =>
+    _sync_interval()
     _active = _active + 1
     if _active >= NativePlayground.tab_count() then
       _active = 0
@@ -184,12 +218,17 @@ class iso PlaygroundNotify is InputNotify
     end
 
   fun ref _switch_left() =>
+    _sync_interval()
     if _active == 0 then
       _active = NativePlayground.tab_count() - 1
       _wrap_backward = true
     else
       _active = _active - 1
     end
+
+  fun ref _sync_interval() =>
+    let live = NativePlayground.live_interval(_env)
+    if live > _interval then _interval = live end
 
   fun ref _dispatch_child_event(event: String): Bool =>
     match _active
@@ -209,55 +248,69 @@ class iso PlaygroundNotify is InputNotify
     end
 
   fun ref _render() =>
-    if _active == 1 then
-      _interval = NativePlayground.live_interval(_env)
-    end
+    _sync_interval()
     NativePlayground.write_live_state(_env, _active, _interval)
     _frame = _frame + 1
     _env.out.write("\x1B[H\x1B[2J")
-    _line("Boon-Pony TUI | Active: " + NativePlayground.tab_title(_active) + " | Q quit")
+    _line("Boon-Pony TUI | " + NativePlayground.tab_title(_active) + " | Q quit")
     _line(NativePlayground.tabs_line(_active))
-    _line("")
-    _line("+ Controls ---------------------------------------------------------+")
     _line(NativePlayground.active_hint(_active))
-    _line("Global: [/] or Shift+Left/Right tabs | e source | v valid | ! invalid | r reload | b build | p rerun | d diff | o editor")
-    _line("")
-    _line("+ Source -----------------------------------------------------------+")
-    _line(NativePlayground.source_path(_active))
-    _line("Source edit mode: " + if _source_edit then "on" else "off" end)
-    _line("Valid edit applied: " + if _valid_edit then "yes" else "no" end)
-    _line("Working diff: " + _diff_lines.string())
-    _line("Reloaded working source: " + if _valid_edit then "yes" else "no" end)
-    _line("Build: " + _build)
-    _line("Rerun: " + _rerun)
-    _line("Diagnostic: " + _diagnostic)
-    _line("External editor: " + _editor)
+    _line("Tabs: [ ] or Shift+Left/Right | Source: e edit, v valid, ! invalid, d diff, b build, p run, o editor")
+    _line("Source: " + NativePlayground.source_path(_active) + " | edit " + if _source_edit then "on" else "off" end + " | diff " + _diff_lines.string() + " | diag " + _diagnostic)
     _line("+ Preview ----------------------------------------------------------+")
     for line in _preview_lines().values() do _line(line) end
-    _line("+ Inspector --------------------------------------------------------+")
-    _line("counter: " + _counter.string())
-    _line("interval: " + _interval.string())
-    _line("A0 = " + _cells_a0)
-    _line("Generated child dispatches: " + _child_dispatches.string())
-    _line("frame: " + _frame.string())
-    _line("Clean log")
+    _line("+ State ------------------------------------------------------------+")
+    _line(_active_status_line())
+    _line("log clean | frame " + _frame.string())
 
   fun ref _line(text: String) =>
     _env.out.write(text + "\r\n")
 
+  fun ref _active_status_line(): String =>
+    match _active
+    | 0 => "counter " + _counter.string() + " | child dispatches " + _child_dispatches.string()
+    | 1 => "interval " + _interval.string() + " | child dispatches " + _child_dispatches.string()
+    | 2 => "A0 " + _cells_a0 + " | editing " + if _cells_editing then "yes" else "no" end + " | child dispatches " + _child_dispatches.string()
+    | 3 => "dynamic A0 " + _cells_a0 + " | child dispatches " + _child_dispatches.string()
+    | 4 => "todo input " + if _todo_focus then "focused" else "idle" end + " | item " + if _todo_item == "" then "-" else _todo_item end + " | child dispatches " + _child_dispatches.string()
+    | 5 => "pong rally " + if _pong_rally then "yes" else "no" end + " | child dispatches " + _child_dispatches.string()
+    | 6 => "arkanoid " + _arkanoid_status + " | child dispatches " + _child_dispatches.string()
+    | 7 => "celsius " + if _temperature_c then "edited" else "idle" end + " | fahrenheit " + if _temperature_f then "edited" else "idle" end + " | child dispatches " + _child_dispatches.string()
+    | 8 => "booking " + if _flight_booked then "return booked" else "idle" end + " | child dispatches " + _child_dispatches.string()
+    | 9 => "elapsed " + _timer_elapsed.string() + "/30 | child dispatches " + _child_dispatches.string()
+    | 10 => "crud " + if _crud_ada then "Ada Lovelace created" else "idle" end + " | child dispatches " + _child_dispatches.string()
+    | 11 => "circles " + _circle_count.string() + " | child dispatches " + _child_dispatches.string()
+    else "child dispatches " + _child_dispatches.string()
+    end
+
   fun ref _preview_lines(): Array[String] val =>
     if _active == 0 then
       recover val [
-        "Live generated preview"
+        "Live preview"
         "Counter: " + _counter.string()
         "Enter increments"
         "+++++"
       ] end
     elseif _active == 1 then
       recover val [
-        "Live generated preview"
+        "Live preview"
         "Interval: " + _interval.string()
         "Timer/interval"
+      ] end
+    elseif _active == 2 then
+      recover val [
+        "Live preview"
+        "Cells"
+        "A1 " + _cells_a0
+        "B1 15"
+        "C1 30"
+      ] end
+    elseif _active == 4 then
+      recover val [
+        "TodoMVC"
+        "Input: [" + _todo_buffer + if _todo_focus then "_" else "" end + "]"
+        if _todo_item == "" then "No todos yet" else "[ ] " + _todo_item end
+        if _todo_item == "" then "0 items left" else "1 item left" end
       ] end
     else
     let generated = NativePlayground.protocol_preview_lines(_env, _active)
@@ -274,6 +327,7 @@ class iso PlaygroundNotify is InputNotify
     end
 
   fun ref _finish() =>
+    _sync_interval()
     NativePlayground.stop_live_timer(_env)
     @system("stty sane".cstring())
     _env.out.write("\x1B[?1006l\x1B[?1000l\x1B[?25h\x1B[?1049l")
@@ -290,6 +344,7 @@ class iso PlaygroundNotify is InputNotify
       "Cells A0: " + _cells_a0
       "Cells Dynamic renders: yes"
       "TodoMVC Write tests: " + if _todo_write_tests then "yes" else "no" end
+      "TodoMVC input commit: " + if _todo_item == "" then "no" else _todo_item end
       "Pong rally: " + if _pong_rally then "yes" else "no" end
       "Arkanoid bricks and paddle: yes"
       "Temperature both directions: " + if _temperature_c and _temperature_f then "yes" else "no" end
@@ -304,7 +359,7 @@ class iso PlaygroundNotify is InputNotify
       "Diagnostics: " + _diagnostic
       "Build: " + _build
       "Rerun: " + _rerun
-      "Source edit generated frames: " + NativePlayground.source_edit_protocol_frames(_env, _active).string()
+      "Source edit generated frames: " + if _source_edit then NativePlayground.source_edit_protocol_frames(_env, _active).string() else "0" end
       "Diff lines: " + _diff_lines.string()
       "External editor: " + _editor
       "Generated child dispatches: " + _child_dispatches.string()
@@ -380,34 +435,18 @@ primitive NativePlayground
 
   fun render_interval_tick(env: Env, value: I64) =>
     env.out.write("\x1B[H\x1B[2J")
-    _live_line(env, "Boon-Pony TUI | Active: Interval | Q quit")
+    _live_line(env, "Boon-Pony TUI | Interval | Q quit")
     _live_line(env, tabs_line(USize(1)))
-    _live_line(env, "")
-    _live_line(env, "+ Controls ---------------------------------------------------------+")
     _live_line(env, active_hint(USize(1)))
-    _live_line(env, "Global: [/] or Shift+Left/Right tabs | e source | v valid | ! invalid | r reload | b build | p rerun | d diff | o editor")
-    _live_line(env, "")
-    _live_line(env, "+ Source -----------------------------------------------------------+")
-    _live_line(env, source_path(USize(1)))
-    _live_line(env, "Source edit mode: off")
-    _live_line(env, "Valid edit applied: no")
-    _live_line(env, "Working diff: 0")
-    _live_line(env, "Reloaded working source: no")
-    _live_line(env, "Build: not run")
-    _live_line(env, "Rerun: not run")
-    _live_line(env, "Diagnostic: clean")
-    _live_line(env, "External editor: not opened")
+    _live_line(env, "Tabs: [ ] or Shift+Left/Right | Source: e edit, v valid, ! invalid, d diff, b build, p run, o editor")
+    _live_line(env, "Source: " + source_path(USize(1)) + " | edit off | diff 0 | diag clean")
     _live_line(env, "+ Preview ----------------------------------------------------------+")
-    _live_line(env, "Live generated preview")
+    _live_line(env, "Live preview")
     _live_line(env, "Interval: " + value.string())
     _live_line(env, "Timer/interval")
-    _live_line(env, "+ Inspector --------------------------------------------------------+")
-    _live_line(env, "counter: 0")
-    _live_line(env, "interval: " + value.string())
-    _live_line(env, "A0 = 5")
-    _live_line(env, "Generated child dispatches: 0")
-    _live_line(env, "frame: auto")
-    _live_line(env, "Clean log")
+    _live_line(env, "+ State ------------------------------------------------------------+")
+    _live_line(env, "interval " + value.string() + " | child dispatches 0")
+    _live_line(env, "log clean | frame auto")
 
   fun _live_line(env: Env, text: String) =>
     env.out.write(text + "\r\n")
@@ -518,21 +557,38 @@ primitive NativePlayground
     let out = String
     var index: USize = 0
     while index < tab_count() do
-      if index > 0 then out.append(" | ") end
-      if index == active then out.append(">") else out.append(" ") end
-      out.append(tab_title(index))
-      if index == active then out.append("<") else out.append(" ") end
+      if index > 0 then out.append(" ") end
+      if index == active then out.append("[") else out.append(" ") end
+      out.append(tab_short_title(index))
+      if index == active then out.append("]") else out.append(" ") end
       index = index + 1
     end
     out.clone()
 
+  fun tab_short_title(index: USize): String =>
+    match index
+    | 0 => "Counter"
+    | 1 => "Interval"
+    | 2 => "Cells"
+    | 3 => "Dynamic"
+    | 4 => "Todo"
+    | 5 => "Pong"
+    | 6 => "Arkanoid"
+    | 7 => "Temp"
+    | 8 => "Flight"
+    | 9 => "Timer"
+    | 10 => "CRUD"
+    | 11 => "Circle"
+    else "Counter"
+    end
+
   fun active_hint(active: USize): String =>
     match active
     | 0 => "Counter: Enter or Space increments the generated counter."
-    | 1 => "Interval: Space or t advances the timer frame."
+    | 1 => "Interval: ticks automatically while this tab is active; Space or t also advances one frame."
     | 2 => "Cells: Enter edits/commits A0, Backspace clears, 0-9 types a cell value."
     | 3 => "Cells Dynamic: Enter edits, numbers type values, Backspace clears."
-    | 4 => "TodoMVC: a adds 'Write tests'; mouse click selects this tab from the tab strip."
+    | 4 => "TodoMVC: click the input area, type text, press Enter. Shortcut: a adds 'Write tests'."
     | 5 => "Pong: Space starts, W/S or Up/Down move paddles, Enter runs the scoring script."
     | 6 => "Arkanoid: Space launches/hits a brick, Left/Right or A/D move paddle, L marks lost."
     | 7 => "Temperature Converter: c edits Celsius, f edits Fahrenheit."
@@ -548,8 +604,8 @@ primitive NativePlayground
     var left: USize = 1
     var index: USize = 0
     while index < tab_count() do
-      if index > 0 then left = left + 3 end
-      let width = tab_title(index).size() + 2
+      if index > 0 then left = left + 1 end
+      let width = tab_short_title(index).size() + 2
       if (x >= left) and (x < (left + width)) then return index end
       left = left + width
       index = index + 1
@@ -795,8 +851,10 @@ primitive NativePlayground
         lines.push(_expected_action("set_focused_input_value", ""))
       end
     | 4 =>
-      if event == "a" then
-        lines.push(_expected_action("type", "Write tests"))
+      if event.at("TodoCommit:", 0) then
+        let value: String val = recover val event.substring(11) end
+        lines.push(_expected_action("focus_input", "", "0"))
+        lines.push(_expected_action("type", value))
         lines.push(_expected_action("key", "Enter"))
       end
     | 5 =>

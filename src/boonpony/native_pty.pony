@@ -50,15 +50,19 @@ primitive NativePty
     let out = "build/cache/pty-playground.out"
     let session = "boonpony_native_pty_playground"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui") +
-      _wait(session, "Active: Counter") +
+      _wait(session, "Boon-Pony TUI | Counter") +
       _send_key(session, "Enter") +
+      _wait(session, "Counter: 1") +
       _send_key(session, "S-Right") +
+      _wait(session, "Interval: 1") +
       _send_key(session, "S-Right") +
       _send_key(session, "Enter") + _send_key(session, "BSpace") + _send_literal(session, "7") + _send_key(session, "Enter") +
       _send_key(session, "S-Right") +
-      _send_mouse(session, "56", "2") + _send_literal(session, "a") +
-      _send_key(session, "S-Right") + _send_key(session, "Enter") +
-      _send_key(session, "S-Right") +
+      _send_key(session, "Enter") + _send_key(session, "BSpace") + _send_literal(session, "7") + _send_key(session, "Enter") +
+      _send_mouse(session, "42", "2") +
+      _send_mouse(session, "20", "8") + _send_literal(session, "Write tests") + _send_key(session, "Enter") +
+      _send_key(session, "S-Right") + _send_key(session, "Space") + _send_key(session, "Up") + _send_key(session, "Down") +
+      _send_key(session, "S-Right") + _send_key(session, "Space") + _send_key(session, "Left") + _send_key(session, "Right") +
       _send_key(session, "S-Right") + _send_literal(session, "c") + _send_literal(session, "f") +
       _send_key(session, "S-Right") + _send_literal(session, "b") +
       _send_key(session, "S-Right") + _send_literal(session, "u") +
@@ -67,13 +71,13 @@ primitive NativePty
       _send_key(session, "S-Right") + _send_key(session, "S-Left") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Cells A0: 7"; "TodoMVC Write tests: yes"; "Pong rally: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Interval ticks while active: yes"; "Cells A0: 7"; "TodoMVC Write tests: yes"; "TodoMVC input commit: Write tests"; "Pong rally: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_source_edit(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-source-edit.out"
     let session = "boonpony_native_pty_source"
     let command = _pty_prefix(session, "132", "40", "export EDITOR=true; export BOONPONY_OPEN_EDITOR=1; build/bin/boonpony tui --example pong") +
-      _wait(session, "Active: Pong") +
+      _wait(session, "Boon-Pony TUI | Pong") +
       _send_literal(session, "e") + _send_literal(session, "v") + _send_literal(session, "d") + _send_literal(session, "r") +
       _send_literal(session, "b") + _send_literal(session, "p") + _send_literal(session, "!") + _send_literal(session, "o") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
