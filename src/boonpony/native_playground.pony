@@ -813,10 +813,13 @@ primitive NativePlayground
             let parts = packet.split_by(";")
             let x = parts(1)?.usize()?
             let y = parts(2)?.usize()?
-            if y <= 2 then
-              events.push("Tab:" + NativePlayground.tab_at_x(x).string())
-            else
-              events.push("Mouse:" + x.string() + ":" + y.string())
+            let terminator = text.at_offset(mouse_end)?
+            if terminator == 'M' then
+              if y <= 2 then
+                events.push("Tab:" + NativePlayground.tab_at_x(x).string())
+              else
+                events.push("Mouse:" + x.string() + ":" + y.string())
+              end
             end
           else
             events.push("Mouse:0:0")

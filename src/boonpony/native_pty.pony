@@ -117,7 +117,7 @@ primitive NativePty
     "tmux send-keys -t " + _shell_quote(session) + " -l " + _shell_quote(text) + "; sleep 0.20; "
 
   fun _send_mouse(session: String, x: String, y: String): String =>
-    "printf '\\033[<0;" + x + ";" + y + "M' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
+    "printf '\\033[<0;" + x + ";" + y + "M\\033[<0;" + x + ";" + y + "m' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
 
   fun _capture(session: String, output_file: String): String =>
     "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(output_file) + "; " +
