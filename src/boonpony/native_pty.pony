@@ -62,12 +62,17 @@ primitive NativePty
       _send_mouse(session, "42", "2") +
       _send_mouse(session, "20", "8") + _send_literal(session, "Write tests") + _send_key(session, "Enter") +
       _send_mouse(session, "20", "8") + _send_literal(session, "Ship demo") + _send_key(session, "Enter") +
+      _send_mouse(session, "10", "10") +
+      _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") +
+      _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") + _send_key(session, "BSpace") +
+      _send_literal(session, "Write tests well") + _send_key(session, "Enter") +
+      _send_mouse(session, "30", "11") +
       _send_mouse(session, "3", "10") +
       _send_mouse(session, "26", "15") +
       _send_mouse(session, "36", "15") +
       _send_mouse(session, "4", "8") +
       _send_mouse(session, "48", "15") +
-      _send_key(session, "S-Right") + _send_key(session, "Space") + _send_key(session, "Up") + _send_key(session, "Down") +
+      _send_key(session, "S-Right") + _send_key(session, "Space") + _sleep("8") + _send_key(session, "Up") + _send_key(session, "Down") +
       _send_key(session, "S-Right") + _send_key(session, "Space") + _send_key(session, "Left") + _send_key(session, "Right") +
       _send_key(session, "S-Right") + _send_literal(session, "c") + _send_literal(session, "f") +
       _send_key(session, "S-Right") + _send_literal(session, "b") +
@@ -77,7 +82,7 @@ primitive NativePty
       _send_key(session, "S-Right") + _send_key(session, "S-Left") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Interval ticks while active: yes"; "Cells A0: 7"; "Cells grid renders: yes"; "Cells Dynamic grid renders: yes"; "TodoMVC Write tests: yes"; "TodoMVC input commit: yes"; "TodoMVC max items: 2"; "TodoMVC filters visited: yes"; "TodoMVC toggle-all: yes"; "TodoMVC clear-completed: yes"; "Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Interval ticks while active: yes"; "Cells A0: 7"; "Cells grid renders: yes"; "Cells Dynamic grid renders: yes"; "TodoMVC Write tests: yes"; "TodoMVC input commit: yes"; "TodoMVC max items: 2"; "TodoMVC filters visited: yes"; "TodoMVC toggle-all: yes"; "TodoMVC clear-completed: yes"; "TodoMVC edit item: yes"; "TodoMVC delete item: yes"; "Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "Pong physics hits: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_source_edit(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-source-edit.out"
@@ -119,8 +124,11 @@ primitive NativePty
   fun _send_mouse(session: String, x: String, y: String): String =>
     "printf '\\033[<0;" + x + ";" + y + "M\\033[<0;" + x + ";" + y + "m' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
 
+  fun _sleep(seconds: String): String =>
+    "sleep " + seconds + "; "
+
   fun _capture(session: String, output_file: String): String =>
-    "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(output_file) + "; " +
+    "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(output_file) + "; " +
     "tmux kill-session -t " + _shell_quote(session) + " 2>/dev/null || true"
 
   fun _report(cases: Array[(String, String, String, Array[String] val, Array[String] val)] box, failures: Array[String] box): String =>
