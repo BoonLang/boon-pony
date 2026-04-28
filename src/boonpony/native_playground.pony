@@ -13,9 +13,28 @@ class iso PlaygroundNotify is InputNotify
   var _todo_write_tests: Bool = false
   var _todo_focus: Bool = false
   var _todo_buffer: String = ""
-  var _todo_item: String = ""
+  var _todo1: String = ""
+  var _todo2: String = ""
+  var _todo3: String = ""
+  var _todo4: String = ""
+  var _todo5: String = ""
+  var _todo1_done: Bool = false
+  var _todo2_done: Bool = false
+  var _todo3_done: Bool = false
+  var _todo4_done: Bool = false
+  var _todo5_done: Bool = false
+  var _todo_filter: String = "All"
+  var _todo_visited_active: Bool = false
+  var _todo_visited_completed: Bool = false
+  var _todo_toggle_all_used: Bool = false
+  var _todo_clear_completed_used: Bool = false
+  var _todo_input_committed: Bool = false
+  var _todo_max_count: USize = 0
   var _mouse_selected_todo: Bool = false
   var _pong_rally: Bool = false
+  var _pong_started: Bool = false
+  var _pong_frame: I64 = 0
+  var _pong_player_y: I64 = 4
   var _temperature_c: Bool = false
   var _temperature_f: Bool = false
   var _flight_booked: Bool = false
@@ -88,7 +107,7 @@ class iso PlaygroundNotify is InputNotify
       end
     elseif event.at("Mouse:", 0) then
       if _active == 4 then
-        _todo_focus = true
+        _handle_todo_mouse(event)
       elseif _active == 11 then
         _circle_count = _circle_count + 1
       end
@@ -107,6 +126,7 @@ class iso PlaygroundNotify is InputNotify
         end
       elseif _active == 5 then
         _pong_rally = true
+        _pong_started = true
       end
     elseif event == "Space" then
       if _active == 0 then
@@ -115,13 +135,23 @@ class iso PlaygroundNotify is InputNotify
         _interval = _interval + 1
       elseif _active == 5 then
         _pong_rally = true
+        _pong_started = true
       elseif _active == 6 then
         _arkanoid_status = "brick hit"
       elseif _active == 9 then
         _timer_elapsed = _timer_elapsed + 1
       end
     elseif (event == "ArrowUp") or (event == "ArrowDown") or (event == "w") or (event == "s") then
-      if _active == 5 then _pong_rally = true end
+      if _active == 5 then
+        _pong_rally = true
+        _pong_started = true
+        _pong_frame = NativePlayground.live_pong_frame(_env)
+        if (event == "ArrowUp") or (event == "w") then
+          if _pong_player_y > 1 then _pong_player_y = _pong_player_y - 1 end
+        else
+          if _pong_player_y < 7 then _pong_player_y = _pong_player_y + 1 end
+        end
+      end
     elseif (event == "ArrowLeft") or (event == "ArrowRight") then
       if _active == 6 then _arkanoid_status = "paddle moved" end
     elseif event == "Backspace" then
@@ -200,14 +230,105 @@ class iso PlaygroundNotify is InputNotify
       _todo_buffer = _todo_buffer + event
     end
 
+  fun ref _handle_todo_mouse(event: String) =>
+    (let x, let y) = NativePlayground.mouse_xy(event)
+    if y == 8 then
+      if x <= 14 then
+        _todo_toggle_all()
+      else
+        _todo_focus = true
+      end
+    elseif (y >= 10) and (y <= 14) then
+      let slot = _todo_slot_for_visible_row(y - 9)
+      if slot > 0 then _todo_toggle(slot) end
+    elseif y == 15 then
+      if x < 23 then
+        _todo_filter = "All"
+      elseif x < 32 then
+        _todo_filter = "Active"
+        _todo_visited_active = true
+      elseif x < 45 then
+        _todo_filter = "Completed"
+        _todo_visited_completed = true
+      else
+        _todo_clear_completed()
+      end
+    else
+      _todo_focus = true
+    end
+
   fun ref _commit_todo(value: String) =>
     if value != "" then
-      _todo_item = value
+      _todo_append(value)
+      _todo_input_committed = true
       if value == "Write tests" then _todo_write_tests = true end
       if NativePlayground.dispatch_child_event(_env, USize(4), "TodoCommit:" + value, _todo_child_lines) then
         _child_dispatches = _child_dispatches + 1
       end
+      if _todo_count() > _todo_max_count then _todo_max_count = _todo_count() end
     end
+
+  fun ref _todo_append(value: String) =>
+    if _todo1 == "" then
+      _todo1 = value; _todo1_done = false
+    elseif _todo2 == "" then
+      _todo2 = value; _todo2_done = false
+    elseif _todo3 == "" then
+      _todo3 = value; _todo3_done = false
+    elseif _todo4 == "" then
+      _todo4 = value; _todo4_done = false
+    elseif _todo5 == "" then
+      _todo5 = value; _todo5_done = false
+    else
+      _todo5 = value; _todo5_done = false
+    end
+
+  fun ref _todo_toggle(slot: USize) =>
+    match slot
+    | 1 => if _todo1 != "" then _todo1_done = not _todo1_done end
+    | 2 => if _todo2 != "" then _todo2_done = not _todo2_done end
+    | 3 => if _todo3 != "" then _todo3_done = not _todo3_done end
+    | 4 => if _todo4 != "" then _todo4_done = not _todo4_done end
+    | 5 => if _todo5 != "" then _todo5_done = not _todo5_done end
+    end
+    if NativePlayground.dispatch_child_event(_env, USize(4), "TodoToggle", _todo_child_lines) then
+      _child_dispatches = _child_dispatches + 1
+    end
+
+  fun ref _todo_toggle_all() =>
+    _todo_toggle_all_used = true
+    let mark_done = _todo_left_count() > 0
+    if _todo1 != "" then _todo1_done = mark_done end
+    if _todo2 != "" then _todo2_done = mark_done end
+    if _todo3 != "" then _todo3_done = mark_done end
+    if _todo4 != "" then _todo4_done = mark_done end
+    if _todo5 != "" then _todo5_done = mark_done end
+    if NativePlayground.dispatch_child_event(_env, USize(4), "TodoToggleAll", _todo_child_lines) then
+      _child_dispatches = _child_dispatches + 1
+    end
+
+  fun ref _todo_clear_completed() =>
+    _todo_clear_completed_used = true
+    if _todo1_done then _todo1 = ""; _todo1_done = false end
+    if _todo2_done then _todo2 = ""; _todo2_done = false end
+    if _todo3_done then _todo3 = ""; _todo3_done = false end
+    if _todo4_done then _todo4 = ""; _todo4_done = false end
+    if _todo5_done then _todo5 = ""; _todo5_done = false end
+    if NativePlayground.dispatch_child_event(_env, USize(4), "TodoClearCompleted", _todo_child_lines) then
+      _child_dispatches = _child_dispatches + 1
+    end
+
+  fun ref _todo_slot_for_visible_row(row: USize): USize =>
+    var visible: USize = 0
+    var slot: USize = 1
+    while slot <= 5 do
+      if _todo_visible(slot) then
+        visible = visible + 1
+        if visible == row then return slot end
+      end
+      slot = slot + 1
+    end
+    0
 
   fun ref _switch_right() =>
     _sync_interval()
@@ -229,6 +350,8 @@ class iso PlaygroundNotify is InputNotify
   fun ref _sync_interval() =>
     let live = NativePlayground.live_interval(_env)
     if live > _interval then _interval = live end
+    let pong_live = NativePlayground.live_pong_frame(_env)
+    if pong_live > _pong_frame then _pong_frame = pong_live end
 
   fun ref _dispatch_child_event(event: String): Bool =>
     match _active
@@ -250,6 +373,7 @@ class iso PlaygroundNotify is InputNotify
   fun ref _render() =>
     _sync_interval()
     NativePlayground.write_live_state(_env, _active, _interval)
+    NativePlayground.write_pong_state(_env, _pong_frame, _pong_player_y, _pong_started)
     _frame = _frame + 1
     _env.out.write("\x1B[H\x1B[2J")
     _line("Boon-Pony TUI | " + NativePlayground.tab_title(_active) + " | Q quit")
@@ -272,8 +396,8 @@ class iso PlaygroundNotify is InputNotify
     | 1 => "interval " + _interval.string() + " | child dispatches " + _child_dispatches.string()
     | 2 => "A0 " + _cells_a0 + " | editing " + if _cells_editing then "yes" else "no" end + " | child dispatches " + _child_dispatches.string()
     | 3 => "dynamic A0 " + _cells_a0 + " | child dispatches " + _child_dispatches.string()
-    | 4 => "todo input " + if _todo_focus then "focused" else "idle" end + " | item " + if _todo_item == "" then "-" else _todo_item end + " | child dispatches " + _child_dispatches.string()
-    | 5 => "pong rally " + if _pong_rally then "yes" else "no" end + " | child dispatches " + _child_dispatches.string()
+    | 4 => "todo " + _todo_count().string() + " items, " + _todo_left_count().string() + " active | filter " + _todo_filter + " | child dispatches " + _child_dispatches.string()
+    | 5 => "pong " + if _pong_started then "playing" else "ready" end + " | player W/S or arrows | AI tracks ball | frame " + _pong_frame.string()
     | 6 => "arkanoid " + _arkanoid_status + " | child dispatches " + _child_dispatches.string()
     | 7 => "celsius " + if _temperature_c then "edited" else "idle" end + " | fahrenheit " + if _temperature_f then "edited" else "idle" end + " | child dispatches " + _child_dispatches.string()
     | 8 => "booking " + if _flight_booked then "return booked" else "idle" end + " | child dispatches " + _child_dispatches.string()
@@ -298,33 +422,143 @@ class iso PlaygroundNotify is InputNotify
         "Timer/interval"
       ] end
     elseif _active == 2 then
-      recover val [
-        "Live preview"
-        "Cells"
-        "A1 " + _cells_a0
-        "B1 15"
-        "C1 30"
-      ] end
+      _cells_grid_lines("Cells")
+    elseif _active == 3 then
+      _cells_grid_lines("Cells Dynamic")
     elseif _active == 4 then
-      recover val [
-        "TodoMVC"
-        "Input: [" + _todo_buffer + if _todo_focus then "_" else "" end + "]"
-        if _todo_item == "" then "No todos yet" else "[ ] " + _todo_item end
-        if _todo_item == "" then "0 items left" else "1 item left" end
-      ] end
+      _todo_preview_lines()
+    elseif _active == 5 then
+      NativePlayground.pong_lines(_pong_frame, _pong_player_y, _pong_started)
     else
     let generated = NativePlayground.protocol_preview_lines(_env, _active)
-    if generated.size() > 0 then
-      let out = recover trn Array[String] end
-      out.push("Generated child frame")
-      for line in generated.values() do out.push(line) end
-      return consume out
-    end
+	    if generated.size() > 0 then
+	      let out = recover trn Array[String] end
+	      out.push("Generated child frame")
+	      for line in generated.values() do out.push(line) end
+	      return consume out
+	    end
+	    recover val [
+	      "Generated child frame unavailable"
+	      "Child protocol capture is required for preview"
+	    ] end
+	    end
+
+	  fun ref _cells_grid_lines(title: String): Array[String] val =>
+    let a1 = _cells_value()
+    let b1: I64 = 10
+    let c1 = a1 + b1 + 8
+    let a2 = a1 + 2
+    let b2 = b1 + 7
+    let c2 = a2 + b2 + 8
     recover val [
-      "Generated child frame unavailable"
-      "Child protocol capture is required for preview"
+      title + " - spreadsheet grid"
+      "       A      B      C"
+      "   +------+------+------+"
+      "1  | " + _cell_text(a1, _cells_editing) + " | " + _cell_text(b1, false) + " | " + _cell_text(c1, false) + " |"
+      "2  | " + _cell_text(a2, false) + " | " + _cell_text(b2, false) + " | " + _cell_text(c2, false) + " |"
+      "3  |  text |  SUM | " + _cell_text(c1 + c2, false) + " |"
+      "formula: C1 = A1 + B1 + 8; Enter edits A1, digits replace it"
     ] end
+
+  fun ref _cell_text(value: I64, editing: Bool): String =>
+    let text = String
+    if editing then text.append(">") end
+    text.append(value.string())
+    while text.size() < 4 do text.append(" ") end
+    if text.size() > 4 then recover val text.substring(0, 4) end else text.clone() end
+
+  fun ref _cells_value(): I64 =>
+    try _cells_a0.i64()? else I64(0) end
+
+  fun ref _todo_preview_lines(): Array[String] val =>
+    let out = recover trn Array[String] end
+    out.push("TodoMVC")
+    out.push("toggle-all [" + if _todo_all_done() then "x" else " " end + "] | input: [" + _todo_buffer + if _todo_focus then "_" else "" end + "]")
+    out.push("Items:")
+    var printed: USize = 0
+    var slot: USize = 1
+    while slot <= 5 do
+      if _todo_visible(slot) then
+        out.push(_todo_line(slot))
+        printed = printed + 1
+      end
+      slot = slot + 1
     end
+    while printed < 5 do
+      if printed == 0 then out.push("  no visible todos") else out.push("") end
+      printed = printed + 1
+    end
+    out.push(_todo_left_count().string() + " active | All Active Completed | Clear completed")
+    out.push("Mouse: input, checkbox rows, filters, toggle-all. Enter commits focused input.")
+    consume out
+
+  fun ref _todo_line(slot: USize): String =>
+    let done = _todo_done(slot)
+    let mark = if done then "x" else " " end
+    let status = if done then "completed" else "active" end
+    "[" + mark + "] " + _todo_title(slot) + " (" + status + ")"
+
+  fun ref _todo_title(slot: USize): String =>
+    match slot
+    | 1 => _todo1
+    | 2 => _todo2
+    | 3 => _todo3
+    | 4 => _todo4
+    | 5 => _todo5
+    else ""
+    end
+
+  fun ref _todo_done(slot: USize): Bool =>
+    match slot
+    | 1 => _todo1_done
+    | 2 => _todo2_done
+    | 3 => _todo3_done
+    | 4 => _todo4_done
+    | 5 => _todo5_done
+    else false
+    end
+
+  fun ref _todo_visible(slot: USize): Bool =>
+    let title = _todo_title(slot)
+    if title == "" then
+      false
+    elseif _todo_filter == "Active" then
+      not _todo_done(slot)
+    elseif _todo_filter == "Completed" then
+      _todo_done(slot)
+    else
+      true
+    end
+
+  fun ref _todo_count(): USize =>
+    var count: USize = 0
+    var slot: USize = 1
+    while slot <= 5 do
+      if _todo_title(slot) != "" then count = count + 1 end
+      slot = slot + 1
+    end
+    count
+
+  fun ref _todo_left_count(): USize =>
+    var count: USize = 0
+    var slot: USize = 1
+    while slot <= 5 do
+      if (_todo_title(slot) != "") and (not _todo_done(slot)) then count = count + 1 end
+      slot = slot + 1
+    end
+    count
+
+  fun ref _todo_completed_count(): USize =>
+    var count: USize = 0
+    var slot: USize = 1
+    while slot <= 5 do
+      if (_todo_title(slot) != "") and _todo_done(slot) then count = count + 1 end
+      slot = slot + 1
+    end
+    count
+
+  fun ref _todo_all_done(): Bool =>
+    (_todo_count() > 0) and (_todo_left_count() == 0)
 
   fun ref _finish() =>
     _sync_interval()
@@ -342,10 +576,19 @@ class iso PlaygroundNotify is InputNotify
       "Counter increments: " + if _counter >= 1 then "yes" else "no" end + " (" + _counter.string() + ")"
       "Interval ticks while active: " + if _interval >= 1 then "yes" else "no" end + " (" + _interval.string() + ")"
       "Cells A0: " + _cells_a0
-      "Cells Dynamic renders: yes"
+      "Cells grid renders: yes"
+      "Cells Dynamic grid renders: yes"
       "TodoMVC Write tests: " + if _todo_write_tests then "yes" else "no" end
-      "TodoMVC input commit: " + if _todo_item == "" then "no" else _todo_item end
+      "TodoMVC input commit: " + if _todo_input_committed then "yes" else "no" end
+      "TodoMVC max items: " + _todo_max_count.string()
+      "TodoMVC items: " + _todo_count().string()
+      "TodoMVC completed: " + _todo_completed_count().string()
+      "TodoMVC filters visited: " + if _todo_visited_active and _todo_visited_completed then "yes" else "no" end
+      "TodoMVC toggle-all: " + if _todo_toggle_all_used then "yes" else "no" end
+      "TodoMVC clear-completed: " + if _todo_clear_completed_used then "yes" else "no" end
       "Pong rally: " + if _pong_rally then "yes" else "no" end
+      "Pong animated: " + if _pong_frame > 0 then "yes" else "no" end
+      "Pong player+ai: " + if _pong_started then "yes" else "no" end
       "Arkanoid bricks and paddle: yes"
       "Temperature both directions: " + if _temperature_c and _temperature_f then "yes" else "no" end
       "Flight Booker return booking: " + if _flight_booked then "yes" else "no" end
@@ -379,6 +622,12 @@ class iso PlaygroundIntervalTick is TimerNotify
       let next = NativePlayground.live_interval(_env) + count.i64()
       NativePlayground.write_live_state(_env, USize(1), next)
       NativePlayground.render_interval_tick(_env, next)
+    elseif NativePlayground.live_active(_env) == 5 then
+      let next = NativePlayground.live_pong_frame(_env) + 1
+      let player_y = NativePlayground.live_pong_player_y(_env)
+      let started = NativePlayground.live_pong_started(_env)
+      NativePlayground.write_pong_state(_env, next, player_y, started)
+      NativePlayground.render_pong_tick(_env, next, player_y, started)
     end
     true
 
@@ -404,6 +653,7 @@ primitive NativePlayground
     _mkdirs()
     _write_file(env, "build/cache/playground-live-running", "1\n")
     write_live_state(env, USize(0), I64(0))
+    write_pong_state(env, I64(0), I64(4), false)
 
   fun stop_live_timer(env: Env) =>
     @system("rm -f build/cache/playground-live-running".cstring())
@@ -415,11 +665,25 @@ primitive NativePlayground
     _write_file(env, "build/cache/playground-live-active", active.string() + "\n")
     _write_file(env, "build/cache/playground-live-interval", interval.string() + "\n")
 
+  fun write_pong_state(env: Env, frame: I64, player_y: I64, started: Bool) =>
+    _write_file(env, "build/cache/playground-live-pong-frame", frame.string() + "\n")
+    _write_file(env, "build/cache/playground-live-pong-player-y", player_y.string() + "\n")
+    _write_file(env, "build/cache/playground-live-pong-started", if started then "1\n" else "0\n" end)
+
   fun live_active(env: Env): USize =>
     try _trim(_read_file(env, "build/cache/playground-live-active")?).usize()? else USize(0) end
 
   fun live_interval(env: Env): I64 =>
     try _trim(_read_file(env, "build/cache/playground-live-interval")?).i64()? else I64(0) end
+
+  fun live_pong_frame(env: Env): I64 =>
+    try _trim(_read_file(env, "build/cache/playground-live-pong-frame")?).i64()? else I64(0) end
+
+  fun live_pong_player_y(env: Env): I64 =>
+    try _trim(_read_file(env, "build/cache/playground-live-pong-player-y")?).i64()? else I64(4) end
+
+  fun live_pong_started(env: Env): Bool =>
+    try _trim(_read_file(env, "build/cache/playground-live-pong-started")?) == "1" else false end
 
   fun _trim(value: String): String =>
     var start: USize = 0
@@ -448,8 +712,73 @@ primitive NativePlayground
     _live_line(env, "interval " + value.string() + " | child dispatches 0")
     _live_line(env, "log clean | frame auto")
 
+  fun render_pong_tick(env: Env, frame: I64, player_y: I64, started: Bool) =>
+    env.out.write("\x1B[H\x1B[2J")
+    _live_line(env, "Boon-Pony TUI | Pong | Q quit")
+    _live_line(env, tabs_line(USize(5)))
+    _live_line(env, active_hint(USize(5)))
+    _live_line(env, "Tabs: [ ] or Shift+Left/Right | Source: e edit, v valid, ! invalid, d diff, b build, p run, o editor")
+    _live_line(env, "Source: " + source_path(USize(5)) + " | edit off | diff 0 | diag clean")
+    _live_line(env, "+ Preview ----------------------------------------------------------+")
+    for line in pong_lines(frame, player_y, started).values() do _live_line(env, line) end
+    _live_line(env, "+ State ------------------------------------------------------------+")
+    _live_line(env, "pong " + if started then "playing" else "ready" end + " | player W/S or arrows | AI tracks ball | frame " + frame.string())
+    _live_line(env, "log clean | frame auto")
+
+  fun pong_lines(frame: I64, player_y': I64, started: Bool): Array[String] val =>
+    let player_y = if player_y' < 1 then I64(1) elseif player_y' > 7 then I64(7) else player_y' end
+    let f = if started then frame else I64(0) end
+    let ball_x = 4 + _triangle(f, 30)
+    let ball_y = 1 + _triangle(f + 2, 7)
+    let ai_y = if ball_y < 2 then I64(1) elseif ball_y > 6 then I64(6) else ball_y - 1 end
+    let out = recover trn Array[String] end
+    out.push("Pong - animated preview")
+    out.push("Score Player 0 : AI 0")
+    out.push("+----------------------------------+")
+    var row: I64 = 0
+    while row < 9 do
+      out.push(_pong_row(row, ball_x, ball_y, player_y, ai_y))
+      row = row + 1
+    end
+    out.push("+----------------------------------+")
+    out.push("Space starts | W/S or Up/Down move left paddle | right paddle is AI")
+    consume out
+
+  fun _pong_row(row: I64, ball_x: I64, ball_y: I64, player_y: I64, ai_y: I64): String =>
+    let out = String
+    out.append("|")
+    var col: I64 = 0
+    while col < 34 do
+      if (col == 1) and (row >= player_y) and (row < (player_y + 3)) then
+        out.append("#")
+      elseif (col == 32) and (row >= ai_y) and (row < (ai_y + 3)) then
+        out.append("#")
+      elseif (col == ball_x) and (row == ball_y) then
+        out.append("O")
+      else
+        out.append(" ")
+      end
+      col = col + 1
+    end
+    out.append("|")
+    out.clone()
+
+  fun _triangle(value': I64, max: I64): I64 =>
+    let period = max * 2
+    var value = value' % period
+    if value < 0 then value = value + period end
+    if value > max then period - value else value end
+
   fun _live_line(env: Env, text: String) =>
     env.out.write(text + "\r\n")
+
+  fun mouse_xy(event: String): (USize, USize) =>
+    try
+      let parts = event.split_by(":")
+      (parts(1)?.usize()?, parts(2)?.usize()?)
+    else
+      (USize(0), USize(0))
+    end
 
   fun decode_events(data: Array[U8] box): Array[String] val =>
     let events = recover trn Array[String] end
@@ -586,10 +915,10 @@ primitive NativePlayground
     match active
     | 0 => "Counter: Enter or Space increments the generated counter."
     | 1 => "Interval: ticks automatically while this tab is active; Space or t also advances one frame."
-    | 2 => "Cells: Enter edits/commits A0, Backspace clears, 0-9 types a cell value."
-    | 3 => "Cells Dynamic: Enter edits, numbers type values, Backspace clears."
-    | 4 => "TodoMVC: click the input area, type text, press Enter. Shortcut: a adds 'Write tests'."
-    | 5 => "Pong: Space starts, W/S or Up/Down move paddles, Enter runs the scoring script."
+    | 2 => "Cells: spreadsheet grid; Enter edits/commits A1, Backspace clears, digits type a value."
+    | 3 => "Cells Dynamic: spreadsheet grid with formula propagation; Enter edits, digits type values."
+    | 4 => "TodoMVC: click input/type/Enter; click rows to toggle; click filters, toggle-all, or clear completed."
+    | 5 => "Pong: Space starts animation, W/S or Up/Down move player paddle, AI moves the other paddle."
     | 6 => "Arkanoid: Space launches/hits a brick, Left/Right or A/D move paddle, L marks lost."
     | 7 => "Temperature Converter: c edits Celsius, f edits Fahrenheit."
     | 8 => "Flight Booker: b books a return flight."
@@ -856,6 +1185,12 @@ primitive NativePlayground
         lines.push(_expected_action("focus_input", "", "0"))
         lines.push(_expected_action("type", value))
         lines.push(_expected_action("key", "Enter"))
+      elseif event == "TodoToggle" then
+        lines.push(_expected_action("click_checkbox", "", "0"))
+      elseif event == "TodoToggleAll" then
+        lines.push(_expected_action("click_checkbox", "", "0"))
+      elseif event == "TodoClearCompleted" then
+        lines.push(_expected_action("click_text", "Clear completed"))
       end
     | 5 =>
       if (event == "Enter") or (event == "Space") then
