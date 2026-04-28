@@ -8,6 +8,7 @@ primitive NativePty
     cases.push(_run_pong(env))
     cases.push(_run_arkanoid(env))
     cases.push(_run_playground(env))
+    cases.push(_run_playground_pong_hold(env))
     cases.push(_run_source_edit(env))
     let failures = Array[String]
     for item in cases.values() do
@@ -29,7 +30,7 @@ primitive NativePty
     let session = "boonpony_native_pty_pong"
     let command = _pty_prefix(session, "100", "32", "build/bin/boonpony play examples/terminal/pong") +
       _wait(session, "Press Space to start") +
-      _send_key(session, "Space") + _wait(session, "Point scored") +
+      _send_key(session, "Space") + _send_repeat_key_fast(session, "Up", USize(24)) + _send_repeat_key_fast(session, "Down", USize(24)) + _send_repeat_key_fast(session, "w", USize(24)) + _send_repeat_key_fast(session, "s", USize(24)) + _wait(session, "Point scored") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
     _run_case(env, "pong", consume command, out, recover val ["terminal restored"; "final score 1 : 0"; "__EXIT:0"] end)
@@ -84,6 +85,18 @@ primitive NativePty
       _capture(session, out)
     _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Interval ticks while active: yes"; "Cells A0: 7"; "Cells grid renders: yes"; "Cells Dynamic grid renders: yes"; "TodoMVC Write tests: yes"; "TodoMVC input commit: yes"; "TodoMVC max items: 2"; "TodoMVC filters visited: yes"; "TodoMVC toggle-all: yes"; "TodoMVC clear-completed: yes"; "TodoMVC edit item: yes"; "TodoMVC delete item: yes"; "Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "Pong physics hits: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
 
+  fun _run_playground_pong_hold(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-pong-hold.out"
+    let session = "boonpony_native_pty_playground_pong_hold"
+    let command = _pty_prefix(session, "120", "36", "build/bin/boonpony tui --example pong") +
+      _wait(session, "Boon-Pony TUI | Pong") +
+      _send_key(session, "Space") +
+      _send_repeat_key_fast(session, "Up", USize(24)) + _send_repeat_key_fast(session, "Down", USize(24)) +
+      _send_repeat_key_fast(session, "w", USize(24)) + _send_repeat_key_fast(session, "s", USize(24)) +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      _capture(session, out)
+    _run_case(env, "playground-pong-hold", consume command, out, recover val ["Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "terminal restored"; "__EXIT:0"] end)
+
   fun _run_source_edit(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-source-edit.out"
     let session = "boonpony_native_pty_source"
@@ -117,6 +130,20 @@ primitive NativePty
 
   fun _send_key(session: String, key: String): String =>
     "tmux send-keys -t " + _shell_quote(session) + " " + _shell_quote(key) + "; sleep 0.20; "
+
+  fun _send_repeat_key_fast(session: String, key: String, count: USize): String =>
+    let out = String
+    var i: USize = 0
+    while i < count do
+      out.append("tmux send-keys -t ")
+      out.append(_shell_quote(session))
+      out.append(" ")
+      out.append(_shell_quote(key))
+      out.append("; ")
+      i = i + 1
+    end
+    out.append("sleep 0.50; ")
+    out.clone()
 
   fun _send_literal(session: String, text: String): String =>
     "tmux send-keys -t " + _shell_quote(session) + " -l " + _shell_quote(text) + "; sleep 0.20; "

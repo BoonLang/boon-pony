@@ -63,6 +63,7 @@ class iso PlaygroundNotify is InputNotify
   var _rerun: String = "not run"
   var _editor: String = "not opened"
   var _frame: I64 = 0
+  var _skip_render: Bool = false
   var _child_dispatches: USize = 0
   let _counter_child_lines: Array[String] ref = Array[String]
   let _interval_child_lines: Array[String] ref = Array[String]
@@ -93,7 +94,11 @@ class iso PlaygroundNotify is InputNotify
         _handle(event)
       end
     end
-    _render()
+    if _skip_render then
+      _skip_render = false
+    else
+      _render()
+    end
 
   fun ref dispose() =>
     None
@@ -162,6 +167,7 @@ class iso PlaygroundNotify is InputNotify
         else
           if _pong_player_y < 7 then _pong_player_y = _pong_player_y + 1 end
         end
+        _skip_render = true
         NativePlayground.write_pong_state(_env, _pong_frame, _pong_player_y, _pong_started, _pong_ai_y, _pong_ball_x, _pong_ball_y, _pong_vx, _pong_vy, _pong_player_score, _pong_ai_score, _pong_hit_count)
       end
     elseif (event == "ArrowLeft") or (event == "ArrowRight") then
@@ -436,7 +442,7 @@ class iso PlaygroundNotify is InputNotify
     | 2 => NativePlayground.dispatch_child_event(_env, _active, event, _cells_child_lines)
     | 3 => NativePlayground.dispatch_child_event(_env, _active, event, _cells_dynamic_child_lines)
     | 4 => NativePlayground.dispatch_child_event(_env, _active, event, _todo_child_lines)
-    | 5 => NativePlayground.dispatch_child_event(_env, _active, event, _pong_child_lines)
+    | 5 => false
     | 6 => NativePlayground.dispatch_child_event(_env, _active, event, _arkanoid_child_lines)
     | 7 => NativePlayground.dispatch_child_event(_env, _active, event, _temperature_child_lines)
     | 8 => NativePlayground.dispatch_child_event(_env, _active, event, _flight_child_lines)
