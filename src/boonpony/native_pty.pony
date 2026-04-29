@@ -6,10 +6,13 @@ primitive NativePty
     _mkdirs()
     let cases = Array[(String, String, String, Array[String] val, Array[String] val)]
     cases.push(_run_counter_interval_protocol(env))
+    cases.push(_run_counter_preview_parity(env))
+    cases.push(_run_todo_protocol_scenarios(env))
     cases.push(_run_pong(env))
     cases.push(_run_arkanoid(env))
     cases.push(_run_playground(env))
     cases.push(_run_playground_source_scroll(env))
+    cases.push(_run_playground_source_mouse_wheel(env))
     cases.push(_run_playground_interval_auto(env))
     cases.push(_run_playground_todo_many(env))
     cases.push(_run_playground_pong_hold(env))
@@ -51,6 +54,23 @@ primitive NativePty
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
     _run_case(env, "arkanoid", consume command, out, recover val ["final status Playing"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_counter_preview_parity(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-counter-preview-parity.out"
+    let command: String val = recover val
+      "build/bin/boonpony build examples/upstream/counter >/dev/null 2>&1 && " +
+      "build/bin/boonpony build examples/upstream/counter_hold >/dev/null 2>&1 && " +
+      "node tests/scripts/verify_counter_protocol.js > " + _shell_quote(out) + " 2>&1"
+    end
+    _run_case(env, "counter-preview-parity", command, out, recover val ["counter preview parity ok"; "counter initial=0+ click=1+"; "counter_hold initial=0+ click=1+"] end)
+
+  fun _run_todo_protocol_scenarios(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-todo-protocol.out"
+    let command: String val = recover val
+      "build/bin/boonpony build examples/upstream/todo_mvc >/dev/null 2>&1 && " +
+      "node tests/scripts/verify_todo_protocol.js > " + _shell_quote(out) + " 2>&1"
+    end
+    _run_case(env, "todo-protocol-scenarios", command, out, recover val ["todo protocol scenarios ok"; "initial/add/filter/toggle/toggle-all/clear/edit/delete/persistence covered"] end)
 
   fun _run_playground(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground.out"
@@ -178,6 +198,21 @@ primitive NativePty
       "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
     _run_case(env, "playground-interval-auto", consume command, out, recover val ["Boon-Pony TUI | Interval"; " | 3"; "examples/upstream/interval/interval.bn @ line 9"; "terminal restored"; "__EXIT:0"] end)
 
+  fun _run_playground_source_mouse_wheel(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-source-mouse-wheel.out"
+    let session = "boonpony_native_pty_playground_source_mouse_wheel"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example cells") +
+      _wait(session, "Boon-Pony TUI | Cells") +
+      _send_wheel_down(session, "20", "8") +
+      _wait(session, "examples/upstream/cells/cells.bn @ line 4") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      _send_wheel_up(session, "20", "8") +
+      _wait(session, "examples/upstream/cells/cells.bn @ line 1") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-source-mouse-wheel", consume command, out, recover val ["Boon-Pony TUI | Cells"; "examples/upstream/cells/cells.bn @ line 4"; "examples/upstream/cells/cells.bn @ line 1"; "terminal restored"; "__EXIT:0"] end)
+
   fun _run_playground_todo_many(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground-todo-many.out"
     let session = "boonpony_native_pty_playground_todo_many"
@@ -279,6 +314,12 @@ primitive NativePty
 
   fun _send_mouse(session: String, x: String, y: String): String =>
     "printf '\\033[<0;" + x + ";" + y + "M\\033[<0;" + x + ";" + y + "m' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
+
+  fun _send_wheel_down(session: String, x: String, y: String): String =>
+    "tmux send-keys -t " + _shell_quote(session) + " \"$(printf '\\033[<65;" + x + ";" + y + "M')\"; sleep 0.20; "
+
+  fun _send_wheel_up(session: String, x: String, y: String): String =>
+    "tmux send-keys -t " + _shell_quote(session) + " \"$(printf '\\033[<64;" + x + ";" + y + "M')\"; sleep 0.20; "
 
   fun _sleep(seconds: String): String =>
     "sleep " + seconds + "; "

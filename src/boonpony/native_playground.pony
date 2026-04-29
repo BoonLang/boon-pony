@@ -998,9 +998,10 @@ primitive NativePlayground
         lines.push(_expected_action("type", value))
         lines.push(_expected_action("key", "Enter"))
       elseif event.at("TodoToggle:", 0) then
-        lines.push(_expected_action("click_checkbox", "", recover val event.substring(11) end))
+        let index = try event.substring(11).usize()? + 1 else USize(1) end
+        lines.push(_expected_action("click_checkbox", "", index.string()))
       elseif event == "TodoToggleAll" then
-        lines.push(_expected_action("click_checkbox", "", "999"))
+        lines.push(_expected_action("click_checkbox", "", "0"))
       elseif event == "TodoClearCompleted" then
         lines.push(_expected_action("click_text", "Clear completed"))
       elseif event.at("TodoEdit:", 0) then
