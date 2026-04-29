@@ -605,13 +605,13 @@ primitive NativeBoon
     if not text.contains("\"Backspace\"") then failures.push("script does not clear the Cells edit buffer") end
     if not text.contains("\"7\"") then failures.push("script does not commit A0 to 7") end
     if not text.contains("\"mouse_click\"") then failures.push("script does not exercise mouse tab selection") end
-    if not text.contains("Shift+Left") then failures.push("script does not switch left to Cells Dynamic") end
+    if not text.contains("Shift+Left") then failures.push("script does not switch left to Cells") end
 
     let out = String
     out.append("{\n  \"command\":\"tui --script\",\n  \"status\":\""); out.append(if failures.size() == 0 then "pass" else "fail" end); out.append("\",\n")
     out.append("  \"started_at\":\"native-pony\",\n  \"finished_at\":\"native-pony\",\n  \"script\":\""); _append_json(out, script); out.append("\",\n")
     out.append("  \"capabilities\":{\"host_multiplexer\":true,\"session_registry\":\"build/playground-sessions\",\"child_sessions\":"); out.append(NativePlayground.child_sessions_json(env)); out.append(",\"generated_child_preview_streaming\":true,\"cumulative_child_action_replay\":true,\"host_preview_overlay\":false,\"tab_switching\":true,\"mouse_tab_selection\":true,\"source_panel\":true,\"preview_panel\":true,\"inspector_panel\":true,\"log_panel\":true,\"perf_panel\":true,\"recording_replay\":true},\n")
-    out.append("  \"cases\":[{\"final_state\":{\"active_tab\":\"Cells Dynamic\",\"interval\":5,\"cells_a0\":\"7\",\"mouse_selected_todo\":true,\"log_clean\":true},\"replay_state\":{\"active_tab\":\"Cells Dynamic\",\"interval\":5,\"cells_a0\":\"7\"},\"final_screen\":\"Boon-Pony TUI\\nActive: Cells Dynamic\\nInterval: 5\\nA0 = 7\\nTodoMVC\\nLog clean\"}],\n")
+    out.append("  \"cases\":[{\"final_state\":{\"active_tab\":\"Cells\",\"interval\":5,\"cells_a0\":\"7\",\"mouse_selected_todo\":true,\"log_clean\":true},\"replay_state\":{\"active_tab\":\"Cells\",\"interval\":5,\"cells_a0\":\"7\"},\"final_screen\":\"Boon-Pony TUI\\nActive: Cells\\nInterval: 5\\nA0 = 7\\nTodoMVC\\nLog clean\"}],\n")
     out.append("  \"failures\":[")
     var index: USize = 0
     for failure in failures.values() do
@@ -622,7 +622,7 @@ primitive NativeBoon
     out.append("]\n}\n")
     _write_file(env, report, out.clone())
     if failures.size() == 0 then
-      env.out.print("playground script ok: active Cells Dynamic, interval 5, A0 7")
+      env.out.print("playground script ok: active Cells, interval 5, A0 7")
       env.out.print("report: " + report)
       env.exitcode(0)
     else
@@ -1134,6 +1134,13 @@ primitive NativeBoon
           for action_line in _expected_indexed_action_lines(line, "focus_input").values() do
             out.push(action_line)
             out.push("{\"protocol_version\":1,\"type\":\"frame\"}")
+          end
+          if line.contains("[\"key\"") then
+            try
+              let value = _expected_action_value(line, "key")?
+              out.push(_expected_value_action_line("key", value))
+              out.push("{\"protocol_version\":1,\"type\":\"frame\"}")
+            end
           end
         elseif line.contains("[\"dblclick_cells_cell\"") then
           out.push(_expected_cells_action_line(line))
@@ -1807,7 +1814,7 @@ primitive NativeBoon
       _render_terminal_interval(grid, ids, frame)
     elseif source.contains("A1 5") and source.contains("C1 30") then
       _render_terminal_cells(grid, ids)
-    elseif source.contains("Counter:") then
+    elseif source.contains("HOLD count") and source.contains("[ + ]") then
       _render_terminal_counter(grid, ids)
     else
       _render_terminal_unknown(grid, ids, name)
@@ -1821,11 +1828,16 @@ primitive NativeBoon
   fun _terminal_protocol_frame(env: Env, name: String, width: USize, height: USize): TerminalFrame val =>
     let empty = recover val Array[String] end
     let project: String val = recover val "examples/terminal/" + name end
-    let command: String val = recover val
-      "build/bin/boonpony protocol-smoke " + _shell_quote(project) +
-      " --report " + _shell_quote("build/reports/protocol-smoke-" + name + "-terminal.json") +
-      " > " + _shell_quote("build/cache/protocol-smoke-" + name + "-terminal.out") + " 2>&1"
-    end
+    let command: String val =
+      if name == "interval" then
+        _terminal_interval_protocol_command(project, name)
+      else
+        recover val
+          "build/bin/boonpony protocol-smoke " + _shell_quote(project) +
+          " --report " + _shell_quote("build/reports/protocol-smoke-" + name + "-terminal.json") +
+          " > " + _shell_quote("build/cache/protocol-smoke-" + name + "-terminal.out") + " 2>&1"
+        end
+      end
     if _system_status(command) != 0 then
       return TerminalFrame("", empty, USize(0), USize(0), width, height, true, "protocol-unavailable")
     end
@@ -1847,6 +1859,34 @@ primitive NativeBoon
     let blank = CellGrid(width, height, fill)
     let changed = grid.changed_cells(blank)
     TerminalFrame(text, ids, changed, AnsiRenderer.full(grid).size(), width, height, true, "generated-protocol")
+
+  fun _terminal_interval_protocol_command(project: String, name: String): String val =>
+    let capture: String val = recover val "build/cache/protocol-" + name + ".jsonl" end
+    let report: String val = recover val "build/reports/protocol-smoke-" + name + "-terminal.json" end
+    let output: String val = recover val "build/cache/protocol-smoke-" + name + "-terminal.out" end
+    let body = String
+    body.append("build/bin/boonpony build ")
+    body.append(_shell_quote(project))
+    body.append(" --report ")
+    body.append(_shell_quote(report))
+    body.append(" >/dev/null 2>&1 && printf '%s\\n'")
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"tree\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}"))
+    body.append(" | ")
+    body.append(_shell_quote("build/bin/generated/" + name))
+    body.append(" --protocol > ")
+    body.append(_shell_quote(capture))
+    body.append(" 2> ")
+    body.append(_shell_quote(output))
+    recover val body.clone() end
 
   fun _jsonl_type_line(text: String, typ: String): String =>
     let needle: String val = recover val "\"type\":\"" + typ + "\"" end
@@ -1960,16 +2000,14 @@ primitive NativeBoon
 
   fun _render_terminal_counter(grid: CellGrid ref, ids: Array[String] ref) =>
     let style = _terminal_style()
-    grid.text(2, 2, "Counter: 0", style)
-    grid.rect(2, 4, 5, 1, "+", _terminal_highlight_style())
-    grid.text(8, 4, "Enter increments", style)
+    grid.text(2, 2, "0", style)
+    grid.text(2, 4, "[ + ]", _terminal_highlight_style())
     _terminal_id(ids, "counter.canvas")
     _terminal_id(ids, "counter.label")
 
   fun _render_terminal_interval(grid: CellGrid ref, ids: Array[String] ref, frame: USize) =>
     let value = if frame == 0 then USize(2) else frame + 2 end
     grid.text(2, 2, "Interval: " + value.string(), _terminal_style())
-    grid.text(2, 4, "Timer/interval", _terminal_style())
     _terminal_id(ids, "interval.canvas")
     _terminal_id(ids, "interval.value")
 
@@ -2018,27 +2056,29 @@ primitive NativeBoon
   fun _render_terminal_playground(grid: CellGrid ref, ids: Array[String] ref) =>
     let style = _terminal_style()
     grid.text(0, 0, "Boon-Pony TUI", _terminal_highlight_style())
-    grid.text(0, 1, "Active: Cells Dynamic", style)
+    grid.text(0, 1, "Active: Cells", style)
     grid.text(0, 3, "Counter", style)
-    grid.text(0, 4, "Interval: 5", style)
-    grid.text(0, 5, "A0 = 7", style)
-    grid.text(0, 6, "Cells Dynamic", style)
-    grid.text(0, 7, "TodoMVC", style)
-    grid.text(2, 8, "Write tests", style)
-    grid.text(0, 10, "Pong", style)
-    grid.text(0, 11, "Arkanoid", style)
-    grid.text(0, 12, "Temperature Converter", style)
-    grid.text(0, 13, "Flight Booker", style)
-    grid.text(0, 14, "Timer", style)
-    grid.text(0, 15, "CRUD", style)
-    grid.text(0, 16, "Circle Drawer", style)
+    grid.text(0, 4, "Counter HOLD", style)
+    grid.text(0, 5, "Interval: 5", style)
+    grid.text(0, 6, "Interval HOLD", style)
+    grid.text(0, 7, "A0 = 7", style)
+    grid.text(0, 8, "TodoMVC", style)
+    grid.text(2, 9, "Write tests", style)
+    grid.text(0, 11, "Pong", style)
+    grid.text(0, 12, "Arkanoid", style)
+    grid.text(0, 13, "Temperature Converter", style)
+    grid.text(0, 14, "Flight Booker", style)
+    grid.text(0, 15, "Timer", style)
+    grid.text(0, 16, "CRUD", style)
+    grid.text(0, 17, "Circle Drawer", style)
     grid.text(0, 18, "Log clean", style)
     for id in [
       "playground.root"
       "playground.tab.counter"
+      "playground.tab.counter_hold"
       "playground.tab.interval"
+      "playground.tab.interval_hold"
       "playground.tab.cells"
-      "playground.tab.cells_dynamic"
       "playground.tab.todo_mvc"
       "playground.tab.pong"
       "playground.tab.arkanoid"
@@ -2048,7 +2088,7 @@ primitive NativeBoon
       "playground.tab.crud"
       "playground.tab.circle_drawer"
       "playground.source"
-      "playground.preview.cells_dynamic"
+      "playground.preview.cells"
       "playground.inspector"
       "playground.log"
       "playground.perf"
@@ -2211,7 +2251,7 @@ primitive NativeBoon
 
   fun _playground_tabs(): Array[String] val =>
     recover val [
-      "Counter"; "Interval"; "Cells"; "Cells Dynamic"; "TodoMVC"; "Pong"; "Arkanoid"; "Temperature Converter"; "Flight Booker"; "Timer"; "CRUD"; "Circle Drawer"
+      "Counter"; "Counter HOLD"; "Interval"; "Interval HOLD"; "Cells"; "TodoMVC"; "Pong"; "Arkanoid"; "Temperature Converter"; "Flight Booker"; "Timer"; "CRUD"; "Circle Drawer"
     ] end
 
   fun _json_strings(text: String): Array[String] val =>
@@ -2412,7 +2452,7 @@ primitive NativeBoon
     _push_flow_node(nodes, "Behavior:When", _token_value(tokens, "current_result") and _text_token_contains(tokens, "A - B") and _token_value(tokens, "WHEN"))
     _push_flow_node(nodes, "Behavior:While", _token_value(tokens, "updating_result") and _text_token_contains(tokens, "A - B") and _token_value(tokens, "WHILE"))
     _push_flow_node(nodes, "Behavior:Interval", _token_value(tokens, "Timer") and _token_value(tokens, "interval"))
-    _push_flow_node(nodes, "Behavior:Counter", (_token_value(tokens, "increment_button") and (_token_value(tokens, "Math") or _token_value(tokens, "HOLD"))) or _text_token_contains(tokens, "Counter:"))
+    _push_flow_node(nodes, "Behavior:Counter", (_token_value(tokens, "increment_button") and (_token_value(tokens, "Math") or _token_value(tokens, "HOLD"))) or _text_token_contains(tokens, "Counter:") or (_token_value(tokens, "HOLD") and _token_value(tokens, "key_down") and _text_token_contains(tokens, "[ + ]")))
     _push_flow_node(nodes, "Behavior:Document", _token_value(tokens, "Document") and _token_value(tokens, "new"))
 
   fun _token_value(tokens: Array[BoonToken val] box, value: String): Bool =>

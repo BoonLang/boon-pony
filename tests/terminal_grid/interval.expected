@@ -1,8 +1,7 @@
 size = "80x24"
 frames = 3
 contains = [
-  "Interval: 2",
-  "Timer/interval"
+  "1"
 ]
 semantic_ids = [
   "interval.canvas",

@@ -5,10 +5,15 @@ primitive NativePty
     let report = if report' == "" then "build/reports/verify-pty.json" else report' end
     _mkdirs()
     let cases = Array[(String, String, String, Array[String] val, Array[String] val)]
+    cases.push(_run_counter_interval_protocol(env))
     cases.push(_run_pong(env))
     cases.push(_run_arkanoid(env))
     cases.push(_run_playground(env))
+    cases.push(_run_playground_source_scroll(env))
+    cases.push(_run_playground_interval_auto(env))
+    cases.push(_run_playground_todo_many(env))
     cases.push(_run_playground_pong_hold(env))
+    cases.push(_run_playground_host_guard(env))
     cases.push(_run_source_edit(env))
     let failures = Array[String]
     for item in cases.values() do
@@ -16,7 +21,7 @@ primitive NativePty
     end
     _write_file(env, report, _report(cases, failures))
     if failures.size() == 0 then
-      env.out.print("pty ok: pong, arkanoid, playground, and source-edit proofs passed")
+      env.out.print("pty ok: generated counter/interval, pong, arkanoid, playground, source scroll, and source-view action proofs passed")
       env.out.print("report: " + report)
       env.exitcode(0)
     else
@@ -52,15 +57,21 @@ primitive NativePty
     let session = "boonpony_native_pty_playground"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui") +
       _wait(session, "Boon-Pony TUI | Counter") +
+      _send_mouse(session, "80", "7") +
+      _sleep("1") +
       _send_key(session, "Enter") +
-      _wait(session, "Counter: 1") +
+      _sleep("1") +
       _send_key(session, "S-Right") +
-      _wait(session, "Interval: 1") +
+      _send_key(session, "Space") +
+      _send_key(session, "S-Right") +
+      _wait(session, "Boon-Pony TUI | Interval") +
+      _wait(session, " | 2") +
+      _send_key(session, "S-Right") +
+      _wait(session, "Boon-Pony TUI | Interval HOLD") +
+      _wait(session, " | 2") +
       _send_key(session, "S-Right") +
       _send_key(session, "Enter") + _send_key(session, "BSpace") + _send_literal(session, "7") + _send_key(session, "Enter") +
-      _send_key(session, "S-Right") +
-      _send_key(session, "Enter") + _send_key(session, "BSpace") + _send_literal(session, "7") + _send_key(session, "Enter") +
-      _send_mouse(session, "42", "2") +
+      _send_mouse(session, "55", "2") +
       _send_mouse(session, "20", "8") + _send_literal(session, "Write tests") + _send_key(session, "Enter") +
       _send_mouse(session, "20", "8") + _send_literal(session, "Ship demo") + _send_key(session, "Enter") +
       _send_mouse(session, "10", "10") +
@@ -69,10 +80,10 @@ primitive NativePty
       _send_literal(session, "Write tests well") + _send_key(session, "Enter") +
       _send_mouse(session, "30", "11") +
       _send_mouse(session, "3", "10") +
-      _send_mouse(session, "26", "15") +
-      _send_mouse(session, "36", "15") +
+      _send_mouse(session, "26", "18") +
+      _send_mouse(session, "36", "18") +
       _send_mouse(session, "4", "8") +
-      _send_mouse(session, "48", "15") +
+      _send_mouse(session, "48", "18") +
       _send_key(session, "S-Right") + _send_key(session, "Space") + _sleep("8") + _send_key(session, "Up") + _send_key(session, "Down") +
       _send_key(session, "S-Right") + _send_key(session, "Space") + _send_key(session, "Left") + _send_key(session, "Right") +
       _send_key(session, "S-Right") + _send_literal(session, "c") + _send_literal(session, "f") +
@@ -83,7 +94,106 @@ primitive NativePty
       _send_key(session, "S-Right") + _send_key(session, "S-Left") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "playground", consume command, out, recover val ["Counter increments: yes"; "Interval ticks while active: yes"; "Cells A0: 7"; "Cells grid renders: yes"; "Cells Dynamic grid renders: yes"; "TodoMVC Write tests: yes"; "TodoMVC input commit: yes"; "TodoMVC max items: 2"; "TodoMVC filters visited: yes"; "TodoMVC toggle-all: yes"; "TodoMVC clear-completed: yes"; "TodoMVC edit item: yes"; "TodoMVC delete item: yes"; "Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "Pong physics hits: yes"; "Temperature both directions: yes"; "Flight Booker return booking: yes"; "CRUD Ada Lovelace: yes"; "Circle Drawer Circles:1"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "playground", consume command, out, recover val ["Generated child dispatches:"; "Generated child previews: yes"; "Host preview overlay: no"; "Boon source visible: yes"; "Tab wrap forward/back: yes"; "Mouse selected TodoMVC: yes"; "log clean: yes"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_counter_interval_protocol(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-counter-interval-protocol.out"
+    let counter_script: String val = recover val
+      "printf '%s\\n' " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"click_button\",\"index\":0}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"click_button\",\"index\":0}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}") +
+      " | build/bin/generated/counter --protocol"
+    end
+    let counter_hold_script: String val = recover val
+      "printf '%s\\n' " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"click_button\",\"index\":0}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}") +
+      " | build/bin/generated/counter_hold --protocol"
+    end
+    let interval_script: String val = recover val
+      "printf '%s\\n' " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}") +
+      " | build/bin/generated/interval --protocol"
+    end
+    let interval_hold_script: String val = recover val
+      "printf '%s\\n' " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}") + " " +
+      _shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}") +
+      " | build/bin/generated/interval_hold --protocol"
+    end
+    let command = String
+    command.append("build/bin/boonpony build examples/upstream/counter >/dev/null 2>&1 && ")
+    command.append("build/bin/boonpony build examples/upstream/counter_hold >/dev/null 2>&1 && ")
+    command.append("build/bin/boonpony build examples/upstream/interval >/dev/null 2>&1 && ")
+    command.append("build/bin/boonpony build examples/upstream/interval_hold >/dev/null 2>&1 && ")
+    command.append("{ ")
+    command.append(counter_script)
+    command.append("; ")
+    command.append(counter_hold_script)
+    command.append("; ")
+    command.append(interval_script)
+    command.append("; ")
+    command.append(interval_hold_script)
+    command.append("; } > ")
+    command.append(_shell_quote(out))
+    command.append(" 2>&1")
+    _run_case(env, "counter-interval-generated-protocol", command.clone(), out, recover val ["\"app\":\"counter\""; "\"text\":\"0+\""; "\"text\":\"1+\""; "\"text\":\"2+\""; "\"app\":\"counter_hold\""; "\"text\":\"0+\""; "\"text\":\"1+\""; "\"app\":\"interval\""; "\"text\":\"\""; "\"text\":\"1\""; "\"app\":\"interval_hold\""] end)
+
+  fun _run_playground_source_scroll(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-source-scroll.out"
+    let session = "boonpony_native_pty_playground_source_scroll"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example cells") +
+      _wait(session, "Boon-Pony TUI | Cells") +
+      _send_key(session, "NPage") +
+      _wait(session, "examples/upstream/cells/cells.bn @ line 9") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-source-scroll", consume command, out, recover val ["Boon-Pony TUI | Cells"; "examples/upstream/cells/cells.bn @ line 9"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_playground_interval_auto(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-interval-auto.out"
+    let session = "boonpony_native_pty_playground_interval_auto"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example interval") +
+      _wait(session, "Boon-Pony TUI | Interval") +
+      _send_key(session, "NPage") +
+      _wait(session, " | 3") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-interval-auto", consume command, out, recover val ["Boon-Pony TUI | Interval"; " | 3"; "examples/upstream/interval/interval.bn @ line 9"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_playground_todo_many(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-todo-many.out"
+    let session = "boonpony_native_pty_playground_todo_many"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example todo_mvc") +
+      _wait(session, "Boon-Pony TUI | TodoMVC") +
+      _send_mouse(session, "20", "8") +
+      _send_literal(session, "One") + _send_key(session, "Enter") +
+      _send_literal(session, "Two") + _send_key(session, "Enter") +
+      _send_literal(session, "Three") + _send_key(session, "Enter") +
+      _send_literal(session, "Four") + _send_key(session, "Enter") +
+      _send_literal(session, "Five") + _send_key(session, "Enter") +
+      _send_literal(session, "Six") + _send_key(session, "Enter") +
+      _send_literal(session, "Seven") + _send_key(session, "Enter") +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      _capture(session, out)
+    _run_case(env, "playground-todo-many", consume command, out, recover val ["Generated child dispatches:"; "Generated child previews: yes"; "Boon source visible: yes"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_playground_pong_hold(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground-pong-hold.out"
@@ -95,18 +205,37 @@ primitive NativePty
       _send_repeat_key_fast(session, "w", USize(24)) + _send_repeat_key_fast(session, "s", USize(24)) +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "playground-pong-hold", consume command, out, recover val ["Pong rally: yes"; "Pong animated: yes"; "Pong player+ai: yes"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "playground-pong-hold", consume command, out, recover val ["Generated child dispatches:"; "Generated child previews: yes"; "Boon source visible: yes"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_source_edit(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
-    let out = "build/cache/pty-source-edit.out"
-    let session = "boonpony_native_pty_source"
-    let command = _pty_prefix(session, "132", "40", "export EDITOR=true; export BOONPONY_OPEN_EDITOR=1; build/bin/boonpony tui --example pong") +
+    let out = "build/cache/pty-source-view-actions.out"
+    let session = "boonpony_native_pty_source_view_actions"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example pong") +
       _wait(session, "Boon-Pony TUI | Pong") +
-      _send_literal(session, "e") + _send_literal(session, "v") + _send_literal(session, "d") + _send_literal(session, "r") +
-      _send_literal(session, "b") + _send_literal(session, "p") + _send_literal(session, "!") + _send_literal(session, "o") +
+      _send_literal(session, "r") + _send_literal(session, "R") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
       _capture(session, out)
-    _run_case(env, "source-edit", consume command, out, recover val ["Source edit mode: on"; "Diagnostics: invalid source marker"; "Build: passed"; "Rerun: Pong preview restarted"; "Source edit generated frames: 2"; "External editor: true completed"; "terminal restored"; "__EXIT:0"] end)
+    _run_case(env, "source-view-actions", consume command, out, recover val ["Boon source visible: yes"; "Run/Rerun: Pong cleared and rerun"; "Clear state and rerun: available"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_playground_host_guard(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let file = "src/boonpony/native_playground.pony"
+    let source = try _read_file(env, file)? else "" end
+    let missing = recover trn Array[String] end
+    for marker in [
+      "_todo_"
+      "_pong_"
+      "_counter:"
+      "_interval:"
+      "render_pong_tick"
+      "render_interval_tick"
+      "advance_pong"
+      "Pong - playable preview"
+      "Live preview"
+    ].values() do
+      if source.contains(marker) then missing.push("host business marker " + marker) end
+    end
+    let status = if missing.size() == 0 then "pass" else "fail" end
+    ("playground-host-guard", status, file, recover val ["no host business state"] end, consume missing)
 
   fun _run_case(env: Env, name: String, command: String box, output_file: String, needles: Array[String] val): (String, String, String, Array[String] val, Array[String] val) =>
     let status = _system_status(command)

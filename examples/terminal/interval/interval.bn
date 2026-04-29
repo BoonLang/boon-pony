@@ -11,5 +11,4 @@ counter:
 
 document: Terminal/canvas(width: 80, height: 24, items: LIST {
   Canvas/text(x: 2, y: 2, text: TEXT { Interval: {counter} })
-  Canvas/text(x: 2, y: 4, text: TEXT { Timer/interval })
 })

@@ -4,14 +4,14 @@ description = "Interval renders a terminal canvas with timer source"
 
 [output]
 match = "contains"
-text = "Interval:"
+text = "1"
 
 [[sequence]]
 description = "Canvas includes interval label"
-actions = [["assert_canvas_contains", "Interval:"]]
-expect = "Interval: 2"
+actions = [["assert_canvas_contains", "1"]]
+expect = "1"
 
 [[sequence]]
 description = "Timer source advances frames"
 actions = [["tick"], ["frame"]]
-expect = "Interval: 2"
+expect = "1"

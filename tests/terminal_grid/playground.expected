@@ -4,11 +4,12 @@ max_changed_cells_after_first_frame = 1500
 
 contains = [
   "Boon-Pony TUI",
-  "Active: Cells Dynamic",
+  "Active: Cells",
   "Counter",
+  "Counter HOLD",
   "Interval: 5",
+  "Interval HOLD",
   "A0 = 7",
-  "Cells Dynamic",
   "TodoMVC",
   "Write tests",
   "Pong",
@@ -24,9 +25,10 @@ contains = [
 semantic_ids = [
   "playground.root",
   "playground.tab.counter",
+  "playground.tab.counter_hold",
   "playground.tab.interval",
+  "playground.tab.interval_hold",
   "playground.tab.cells",
-  "playground.tab.cells_dynamic",
   "playground.tab.todo_mvc",
   "playground.tab.pong",
   "playground.tab.arkanoid",
@@ -36,7 +38,7 @@ semantic_ids = [
   "playground.tab.crud",
   "playground.tab.circle_drawer",
   "playground.source",
-  "playground.preview.cells_dynamic",
+  "playground.preview.cells",
   "playground.inspector",
   "playground.log",
   "playground.perf"

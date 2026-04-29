@@ -1,5 +1,6 @@
 sources: [
   keyboard: [event: [key_down: SOURCE]]
+  mouse: [event: [click: SOURCE]]
   frame: [event: [tick: SOURCE]]
 ]
 
@@ -7,10 +8,10 @@ counter:
   0 |> HOLD count {
     sources.keyboard.event.key_down.key
       |> WHEN { Enter => count + 1 __ => SKIP }
+    sources.mouse.event.click |> THEN { count + 1 }
   }
 
 document: Terminal/canvas(width: 80, height: 24, items: LIST {
-  Canvas/text(x: 2, y: 2, text: TEXT { Counter: {counter} })
-  Canvas/rect(x: 2, y: 4, width: 5, height: 1, glyph: TEXT { + })
-  Canvas/text(x: 8, y: 4, text: TEXT { Enter increments })
+  Canvas/text(x: 2, y: 2, text: TEXT { {counter} })
+  Canvas/text(x: 2, y: 4, text: TEXT { [ + ] })
 })

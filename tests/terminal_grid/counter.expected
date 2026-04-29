@@ -1,8 +1,8 @@
 size = "80x24"
 frames = 3
 contains = [
-  "Counter: 0",
-  "Enter increments"
+  "0",
+  "+"
 ]
 semantic_ids = [
   "counter.canvas",
