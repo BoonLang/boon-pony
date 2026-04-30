@@ -25,6 +25,7 @@ class iso PlaygroundNotify is InputNotify
   var _editor: String = "not opened"
   var _frame: I64 = 0
   var _source_scroll: USize = 0
+  var _preview_scroll: USize = 0
   var _child_dispatches: USize = 0
   var _wrap_forward: Bool = false
   var _wrap_backward: Bool = false
@@ -81,6 +82,10 @@ class iso PlaygroundNotify is InputNotify
           if tab == 5 then _mouse_selected_example = true end
         end
       end
+    elseif _handle_wheel_scroll_command(event) then
+      None
+    elseif _handle_task_list_scroll_command(event) then
+      None
     elseif _handle_source_scroll_command(event) then
       None
     elseif (not _text_capture) and _handle_source_command(event) then
@@ -121,11 +126,47 @@ class iso PlaygroundNotify is InputNotify
     elseif event == "PageUp" then
       _source_scroll = if _source_scroll > 8 then _source_scroll - 8 else USize(0) end
       true
+    elseif event == "Shift+Down" then
+      _source_scroll = _source_scroll + 1
+      true
+    elseif event == "Shift+Up" then
+      _source_scroll = if _source_scroll > 0 then _source_scroll - 1 else USize(0) end
+      true
     elseif event == "WheelDown" then
       _source_scroll = _source_scroll + 3
       true
     elseif event == "WheelUp" then
       _source_scroll = if _source_scroll > 3 then _source_scroll - 3 else USize(0) end
+      true
+    else
+      false
+    end
+
+  fun ref _handle_wheel_scroll_command(event: String): Bool =>
+    if not ((event.at("WheelDown:", 0)) or (event.at("WheelUp:", 0))) then return false end
+    (let x, _) = NativePlayground.wheel_xy(event)
+    if (_active == 5) and (x >= 74) then
+      if event.at("WheelDown:", 0) then
+        _preview_scroll = (_preview_scroll + 1).min(NativePlayground.preview_max_scroll(_env, _active))
+      else
+        _preview_scroll = if _preview_scroll > 0 then _preview_scroll - 1 else USize(0) end
+      end
+    else
+      if event.at("WheelDown:", 0) then
+        _source_scroll = _source_scroll + 3
+      else
+        _source_scroll = if _source_scroll > 3 then _source_scroll - 3 else USize(0) end
+      end
+    end
+    true
+
+  fun ref _handle_task_list_scroll_command(event: String): Bool =>
+    if _active != 5 then return false end
+    if event == "ArrowDown" then
+      _preview_scroll = (_preview_scroll + 1).min(NativePlayground.preview_max_scroll(_env, _active))
+      true
+    elseif event == "ArrowUp" then
+      _preview_scroll = if _preview_scroll > 0 then _preview_scroll - 1 else USize(0) end
       true
     else
       false
@@ -144,14 +185,14 @@ class iso PlaygroundNotify is InputNotify
       (let x, let y) = NativePlayground.mouse_xy(event)
       try
         let rel_x = NativePlayground.todo_preview_x(x)?
-        let line = NativePlayground.todo_preview_line(_env, _active, y)?
+        let line = NativePlayground.todo_preview_line(_env, _active, y, _preview_scroll)?
         if line.at("Input:", 0) then
           _text_capture = true
           _text_edit = false
           _text_buffer = ""
           return "TodoFocus:0"
         elseif NativePlayground.todo_preview_item_line(line) then
-          let item_index = NativePlayground.todo_item_index_for_screen_y(_env, _active, y)?
+          let item_index = NativePlayground.todo_item_index_for_screen_y(_env, _active, y, _preview_scroll)?
           if rel_x <= 4 then
             _reset_text_capture()
             return "TodoToggle:" + item_index.string()
@@ -238,6 +279,7 @@ class iso PlaygroundNotify is InputNotify
 
   fun ref _after_tab_change() =>
     _source_scroll = 0
+    _preview_scroll = 0
     _reset_text_capture()
     if NativePlayground.is_interval_tab(_active) then
       NativePlayground.reset_interval_tab(_env, _active)
@@ -269,6 +311,7 @@ class iso PlaygroundNotify is InputNotify
 
   fun ref _render() =>
     _frame = _frame + 1
+    _preview_scroll = _preview_scroll.min(NativePlayground.preview_max_scroll(_env, _active))
     NativePlayground.write_active_state(_env, _active, _source_edit, _source_scroll)
     _env.out.write("\x1B[H\x1B[2J")
     _line("Boon-Pony TUI | " + NativePlayground.tab_title(_active) + " | Q quit")
@@ -281,7 +324,7 @@ class iso PlaygroundNotify is InputNotify
 
   fun ref _render_terminal_cursor() =>
     if _active == 5 then
-      let row = if _text_edit then 10 + _text_target_index else USize(7) end
+      let row = if _text_edit then try NativePlayground.todo_screen_y_for_item(_env, _active, _text_target_index, _preview_scroll)? else USize(7) end else USize(7) end
       let col = USize(81) + _text_buffer.size()
       _env.out.write("\x1B[" + row.string() + ";" + col.string() + "H\x1B[?25h")
     else
@@ -294,10 +337,17 @@ class iso PlaygroundNotify is InputNotify
   fun ref _render_preview_and_source() =>
     let preview = _preview_lines()
     let source = NativePlayground.source_preview_lines(_env, _active, _source_edit, _source_scroll, USize(20))
+    let source_total = NativePlayground.source_total_lines(_env, _active, _source_edit)
     let rows = USize(21)
+    let preview_total = NativePlayground.preview_scroll_total(_env, _active, rows)
     var row: USize = 0
     while row < rows do
-      _line(_pad(_line_at(source, row), USize(70)) + " | " + _pad(_line_at(preview, row), USize(54)))
+      _line(
+        _pad(_line_at(source, row), USize(69)) +
+        NativePlayground.scrollbar(row, rows, source_total, _source_scroll) +
+        " | " +
+        _pad(_line_at(preview, row), USize(53)) +
+        NativePlayground.preview_scrollbar(_env, _active, row, rows, preview_total, _preview_scroll))
       row = row + 1
     end
 
@@ -319,11 +369,11 @@ class iso PlaygroundNotify is InputNotify
       _blank_preview_once = false
       return recover val [ "" ] end
     end
-    let generated = NativePlayground.protocol_preview_lines(_env, _active)
+    let generated = NativePlayground.protocol_preview_lines(_env, _active, _preview_scroll)
     if generated.size() > 0 then
       generated
     elseif NativePlayground.ensure_child_protocol(_env, _active) then
-      let built = NativePlayground.protocol_preview_lines(_env, _active)
+      let built = NativePlayground.protocol_preview_lines(_env, _active, _preview_scroll)
       if built.size() > 0 then
         built
       else
@@ -339,7 +389,7 @@ class iso PlaygroundNotify is InputNotify
   fun ref _finish() =>
     NativePlayground.write_inactive_state(_env)
     @system("stty sane".cstring())
-    _env.out.write("\x1B[?1006l\x1B[?1000l\x1B[?25h\x1B[?1049l")
+    _env.out.write("\x1B[?1006l\x1B[?1002l\x1B[?1000l\x1B[?25h\x1B[?1049l")
     NativePlayground.write_report(_env, _report, NativePlayground.tab_title(_active))
     for line in _summary_lines().values() do _env.out.print(line) end
     _env.input.dispose()
@@ -367,7 +417,7 @@ primitive NativePlayground
     let timers = Timers
     timers(Timer(PlaygroundTickNotify(env), 100_000_000, 100_000_000))
     @system("stty raw -echo".cstring())
-    env.out.write("\x1B[?1049h\x1B[?25l\x1B[?1000h\x1B[?1006h\x1B[2J")
+    env.out.write("\x1B[?1049h\x1B[?25l\x1B[?1000h\x1B[?1002h\x1B[?1006h\x1B[2J")
     env.input(PlaygroundNotify(env, example, report), 64)
 
   fun reset_live_cache() =>
@@ -525,25 +575,102 @@ primitive NativePlayground
       (USize(0), USize(0))
     end
 
+  fun wheel_xy(event: String): (USize, USize) =>
+    try
+      let parts = event.split_by(":")
+      (parts(1)?.usize()?, parts(2)?.usize()?)
+    else
+      (USize(0), USize(0))
+    end
+
+  fun scrollbar(row: USize, rows: USize, total: USize, scroll: USize): String =>
+    if (rows <= 1) or (total <= rows) then return " " end
+    let max_scroll = total - rows
+    let thumb = if max_scroll == 0 then USize(0) else (scroll.min(max_scroll) * (rows - 1)) / max_scroll end
+    if row == thumb then "#" else "|" end
+
+  fun preview_scrollbar(env: Env, active: USize, row: USize, rows: USize, total: USize, scroll: USize): String =>
+    if active == 5 then
+      todo_scrollbar(env, active, row, scroll)
+    else
+      scrollbar(row, rows, total, scroll)
+    end
+
+  fun todo_scrollbar(env: Env, active: USize, row: USize, scroll: USize): String =>
+    let lines = protocol_raw_preview_lines(env, active)
+    var item_count: USize = 0
+    var control_count: USize = 0
+    var header_count: USize = 0
+    var line_index: USize = 0
+    for line in lines.values() do
+      if line_index < 4 then
+        header_count = header_count + 1
+      elseif todo_preview_item_line(line) then
+        item_count = item_count + 1
+      else
+        control_count = control_count + 1
+      end
+      line_index = line_index + 1
+    end
+    let track_rows = task_list_item_capacity(header_count, control_count)
+    if (track_rows <= 1) or (item_count <= track_rows) then return " " end
+    if (row < header_count) or (row >= (header_count + track_rows)) then return " " end
+    let max_scroll = task_list_scroll_max_for(item_count, track_rows)
+    let thumb = header_count + ((scroll.min(max_scroll) * (track_rows - 1)) / max_scroll)
+    if row == thumb then "#" else "|" end
+
+  fun source_total_lines(env: Env, active: USize, source_edit: Bool): USize =>
+    let file = if source_edit then "build/cache/playground-edit-" + tab_id(active) + ".bn" else source_path(active) end
+    try _read_file(env, file)?.split_by("\n").size() + 1 else USize(1) end
+
+  fun preview_total_lines(env: Env, active: USize): USize =>
+    protocol_raw_preview_lines(env, active).size()
+
+  fun preview_max_scroll(env: Env, active: USize): USize =>
+    let lines = protocol_raw_preview_lines(env, active)
+    if active == 5 then
+      task_list_max_scroll(lines)
+    elseif lines.size() > 21 then
+      lines.size() - 21
+    else
+      USize(0)
+    end
+
+  fun preview_scroll_total(env: Env, active: USize, rows: USize): USize =>
+    let max_scroll = preview_max_scroll(env, active)
+    if max_scroll == 0 then rows else rows + max_scroll end
+
   fun todo_preview_x(x: USize): USize ? =>
     if x < 74 then error end
     x - 73
 
-  fun todo_preview_line(env: Env, active: USize, y: USize): String ? =>
+  fun todo_preview_line(env: Env, active: USize, y: USize, scroll: USize = 0): String ? =>
     if y < 6 then error end
-    protocol_preview_lines(env, active)(y - 6)?
+    protocol_preview_lines(env, active, scroll)(y - 6)?
 
   fun todo_preview_item_line(line: String): Bool =>
     line.at("[ ] ", 0) or line.at("[x] ", 0) or line.at("[edit] ", 0)
 
-  fun todo_item_index_for_screen_y(env: Env, active: USize, y: USize): USize ? =>
+  fun todo_item_index_for_screen_y(env: Env, active: USize, y: USize, scroll: USize = 0): USize ? =>
     if y < 6 then error end
     let target = y - 6
-    var index: USize = 0
+    var index: USize = scroll
     var row: USize = 0
-    for line in protocol_preview_lines(env, active).values() do
+    for line in protocol_preview_lines(env, active, scroll).values() do
       if todo_preview_item_line(line) then
         if row == target then return index end
+        index = index + 1
+      end
+      row = row + 1
+    end
+    error
+
+  fun todo_screen_y_for_item(env: Env, active: USize, item: USize, scroll: USize = 0): USize ? =>
+    var index: USize = scroll
+    var row: USize = 0
+    for line in protocol_preview_lines(env, active, scroll).values() do
+      if todo_preview_item_line(line) then
+        if index == item then return row + 6 end
         index = index + 1
       end
       row = row + 1
@@ -584,6 +711,12 @@ primitive NativePlayground
         elseif _starts_at(text, "\x1B[1;2D", cursor) then
           events.push("Shift+Left")
           cursor = cursor + 6
+        elseif _starts_at(text, "\x1B[1;2A", cursor) then
+          events.push("Shift+Up")
+          cursor = cursor + 6
+        elseif _starts_at(text, "\x1B[1;2B", cursor) then
+          events.push("Shift+Down")
+          cursor = cursor + 6
         elseif _starts_at(text, "\x1B[5~", cursor) then
           events.push("PageUp")
           cursor = cursor + 4
@@ -615,9 +748,9 @@ primitive NativePlayground
             let terminator = text.at_offset(mouse_end)?
             if terminator == 'M' then
               if button == 64 then
-                events.push("WheelUp")
+                events.push("WheelUp:" + x.string() + ":" + y.string())
               elseif button == 65 then
-                events.push("WheelDown")
+                events.push("WheelDown:" + x.string() + ":" + y.string())
               elseif y <= 2 then
                 events.push("Tab:" + NativePlayground.tab_at_x(x).string())
               else
@@ -1180,8 +1313,18 @@ primitive NativePlayground
     out.append("}")
     out.clone()
 
-  fun protocol_preview_lines(env: Env, active: USize): Array[String] val =>
+  fun protocol_preview_lines(env: Env, active: USize, scroll: USize = 0): Array[String] val =>
     let out = recover trn Array[String] end
+    let raw_lines = protocol_raw_preview_lines(env, active)
+    if active == 5 then
+      _task_list_scrolled_preview(raw_lines, scroll)
+    else
+      for line in raw_lines.values() do out.push(line) end
+      consume out
+    end
+
+  fun protocol_raw_preview_lines(env: Env, active: USize): Array[String] val =>
+    let raw = recover trn Array[String] end
     let capture: String val = recover val "build/cache/protocol-" + tab_id(active) + ".jsonl" end
     try
       let text = _read_file(env, capture)?
@@ -1192,18 +1335,76 @@ primitive NativePlayground
       if frame_line != "" then
         var cursor: ISize = 0
         var count: USize = 0
-        while (cursor < frame_line.size().isize()) and (count < 20) do
+        let max_lines = if active == 5 then USize(120) else USize(20) end
+        while (cursor < frame_line.size().isize()) and (count < max_lines) do
           (let value, let next_cursor) = _json_string_after(frame_line, "\"text\":\"", cursor)?
           for chunk in _preview_chunks(value).values() do
-            out.push(chunk)
+            raw.push(chunk)
             count = count + 1
-            if count >= 20 then break end
+            if count >= max_lines then break end
           end
           cursor = next_cursor
         end
       end
     end
+    consume raw
+
+  fun _task_list_scrolled_preview(lines: Array[String] val, scroll: USize): Array[String] val =>
+    let out = recover trn Array[String] end
+    let items = recover trn Array[String] end
+    let controls = recover trn Array[String] end
+    var row: USize = 0
+    for line in lines.values() do
+      if row < 4 then
+        out.push(line)
+      elseif todo_preview_item_line(line) then
+        items.push(line)
+      else
+        controls.push(line)
+      end
+      row = row + 1
+    end
+    let item_lines: Array[String] val = consume items
+    let control_lines: Array[String] val = consume controls
+    let item_capacity = task_list_item_capacity(out.size(), control_lines.size())
+    let max_scroll = task_list_scroll_max_for(item_lines.size(), item_capacity)
+    var item_index = scroll.min(max_scroll)
+    var printed: USize = 0
+    while (item_index < item_lines.size()) and (printed < item_capacity) do
+      try out.push(item_lines(item_index)?) end
+      item_index = item_index + 1
+      printed = printed + 1
+    end
+    var control_index: USize = 0
+    while (control_index < control_lines.size()) and (out.size() < 21) do
+      try out.push(control_lines(control_index)?) end
+      control_index = control_index + 1
+    end
     consume out
+
+  fun task_list_max_scroll(lines: Array[String] val): USize =>
+    var item_count: USize = 0
+    var control_count: USize = 0
+    var header_count: USize = 0
+    var row: USize = 0
+    for line in lines.values() do
+      if row < 4 then
+        header_count = header_count + 1
+      elseif todo_preview_item_line(line) then
+        item_count = item_count + 1
+      else
+        control_count = control_count + 1
+      end
+      row = row + 1
+    end
+    task_list_scroll_max_for(item_count, task_list_item_capacity(header_count, control_count))
+
+  fun task_list_item_capacity(header_count: USize, control_count': USize): USize =>
+    let control_count = control_count'.min(USize(4))
+    if (21 > header_count) and ((21 - header_count) > control_count) then (21 - header_count) - control_count else USize(0) end
+
+  fun task_list_scroll_max_for(item_count: USize, item_capacity: USize): USize =>
+    if item_count > item_capacity then item_count - item_capacity else USize(0) end
 
   fun _preview_chunks(value: String): Array[String] val =>
     let out = recover trn Array[String] end

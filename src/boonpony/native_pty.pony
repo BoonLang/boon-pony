@@ -17,6 +17,7 @@ primitive NativePty
     cases.push(_run_playground_interval_auto(env))
     cases.push(_run_playground_todo_many(env))
     cases.push(_run_playground_todo_mouse_edit_delete(env))
+    cases.push(_run_playground_todo_scroll(env))
     cases.push(_run_playground_pong_hold(env))
     cases.push(_run_playground_host_guard(env))
     cases.push(_run_source_edit(env))
@@ -278,6 +279,69 @@ primitive NativePty
       "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
     _run_case(env, "playground-todo-mouse-edit-delete", consume command, out, recover val ["Input: One|"; "[ ] One"; "[edit] Buy groceries"; "[ ] Clean room"; "[del]"; "terminal restored"; "__EXIT:0"] end)
 
+  fun _run_playground_todo_scroll(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-todo-scroll.out"
+    let session = "boonpony_native_pty_playground_todo_scroll"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example todo_mvc") +
+      _wait(session, "Input: |") +
+      _send_literal(session, "A01") + _send_key(session, "Enter") +
+      _send_literal(session, "A02") + _send_key(session, "Enter") +
+      _send_literal(session, "A03") + _send_key(session, "Enter") +
+      _send_literal(session, "A04") + _send_key(session, "Enter") +
+      _send_literal(session, "A05") + _send_key(session, "Enter") +
+      _send_literal(session, "A06") + _send_key(session, "Enter") +
+      _send_literal(session, "A07") + _send_key(session, "Enter") +
+      _send_literal(session, "A08") + _send_key(session, "Enter") +
+      _send_literal(session, "A09") + _send_key(session, "Enter") +
+      _send_literal(session, "A10") + _send_key(session, "Enter") +
+      _send_literal(session, "A11") + _send_key(session, "Enter") +
+      _send_literal(session, "A12") + _send_key(session, "Enter") +
+      _send_literal(session, "A13") + _send_key(session, "Enter") +
+      _send_literal(session, "A14") + _send_key(session, "Enter") +
+      _send_literal(session, "A15") + _send_key(session, "Enter") +
+      _send_literal(session, "A16") + _send_key(session, "Enter") +
+      _send_literal(session, "A17") + _send_key(session, "Enter") +
+      _send_literal(session, "A18") + _send_key(session, "Enter") +
+      _send_literal(session, "A19") + _send_key(session, "Enter") +
+      _send_literal(session, "A20") + _send_key(session, "Enter") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      "if tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A20'; then echo 'todo scroll failed: A20 visible before scroll' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
+      _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
+      _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
+      _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
+      _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
+      "if ! tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A20'; then echo 'todo scroll failed: Down did not reveal A20' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      "if ! tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A08'; then echo 'todo scroll failed: Down did not clamp at expected bottom' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") +
+      _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") +
+      _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") +
+      _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") +
+      _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") + _send_key(session, "Up") +
+      "if ! tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'Buy groceries'; then echo 'todo scroll failed: Up did not restore top' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") +
+      _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") +
+      _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") +
+      _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") +
+      _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") + _send_wheel_down(session, "82", "16") +
+      "if ! tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A20'; then echo 'todo scroll failed: wheel did not reveal A20' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      "if ! tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A08'; then echo 'todo scroll failed: wheel overscrolled beyond expected bottom' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_wheel_down(session, "20", "10") +
+      _wait(session, "@ line 4") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_shift_down(session) +
+      _wait(session, "@ line 5") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_shift_up(session) +
+      _wait(session, "@ line 4") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-todo-scroll", consume command, out, recover val ["A01"; "A08"; "A20"; "Buy groceries"; "@ line 4"; "@ line 5"; "#"; "terminal restored"; "__EXIT:0"] end)
+
   fun _run_playground_pong_hold(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground-pong-hold.out"
     let session = "boonpony_native_pty_playground_pong_hold"
@@ -368,6 +432,12 @@ primitive NativePty
 
   fun _send_wheel_up(session: String, x: String, y: String): String =>
     "tmux send-keys -t " + _shell_quote(session) + " \"$(printf '\\033[<64;" + x + ";" + y + "M')\"; sleep 0.20; "
+
+  fun _send_shift_down(session: String): String =>
+    "printf '\\033[1;2B' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
+
+  fun _send_shift_up(session: String): String =>
+    "printf '\\033[1;2A' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "
 
   fun _sleep(seconds: String): String =>
     "sleep " + seconds + "; "
