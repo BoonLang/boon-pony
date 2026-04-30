@@ -39,24 +39,40 @@ primitive NativePty
   fun _run_pong(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-pong.out"
     let session = "boonpony_native_pty_pong"
-    let command = _pty_prefix(session, "100", "32", "build/bin/boonpony play examples/terminal/pong") +
-      _wait(session, "Press Space to start") +
-      _send_key(session, "Space") + _send_repeat_key_fast(session, "Up", USize(24)) + _send_repeat_key_fast(session, "Down", USize(24)) + _send_repeat_key_fast(session, "w", USize(24)) + _send_repeat_key_fast(session, "s", USize(24)) + _wait(session, "Point scored") +
+    let first = "build/cache/pty-pong-first.out"
+    let second = "build/cache/pty-pong-second.out"
+    let command = "build/bin/boonpony build examples/terminal/pong >/dev/null 2>&1 && " +
+      _pty_prefix(session, "100", "32", "build/bin/generated/pong") +
+      _wait(session, "Pong") +
+      _sleep("0.4") +
+      "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(first) + "; " +
+      _sleep("0.8") +
+      "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(second) + "; " +
+      "if cmp -s " + _shell_quote(first) + " " + _shell_quote(second) + "; then echo 'pong auto animation failed' > " + _shell_quote(out) + "; exit 1; else echo 'pong auto animation observed' > " + _shell_quote(out) + "; fi; " +
+      _send_repeat_key_fast(session, "Up", USize(8)) + _send_repeat_key_fast(session, "Down", USize(8)) + _send_repeat_key_fast(session, "w", USize(8)) + _send_repeat_key_fast(session, "s", USize(8)) + _wait(session, "Point scored") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
-      _capture(session, out)
-    _run_case(env, "pong", consume command, out, recover val ["terminal restored"; "final score 1 : 0"; "__EXIT:0"] end)
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "pong", consume command, out, recover val ["pong auto animation observed"; "terminal restored"; "final score 1 : 0"] end)
 
   fun _run_arkanoid(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-arkanoid.out"
     let session = "boonpony_native_pty_arkanoid"
-    let command = _pty_prefix(session, "100", "34", "build/bin/boonpony play examples/terminal/arkanoid") +
+    let first = "build/cache/pty-arkanoid-first.out"
+    let second = "build/cache/pty-arkanoid-second.out"
+    let command = "build/bin/boonpony build examples/terminal/arkanoid >/dev/null 2>&1 && " +
+      _pty_prefix(session, "100", "34", "build/bin/generated/arkanoid") +
       _wait(session, "Playing") +
-      _send_key(session, "Space") + _wait(session, "Brick removed") +
+      _sleep("0.4") +
+      "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(first) + "; " +
+      _sleep("0.8") +
+      "tmux capture-pane -p -t " + _shell_quote(session) + " > " + _shell_quote(second) + "; " +
+      "if cmp -s " + _shell_quote(first) + " " + _shell_quote(second) + "; then echo 'arkanoid auto animation failed' > " + _shell_quote(out) + "; exit 1; else echo 'arkanoid auto animation observed' > " + _shell_quote(out) + "; fi; " +
+      _send_key(session, "Left") + _send_key(session, "Right") + _wait(session, "Brick removed") +
       _send_key(session, "L") + _wait(session, "Lost") +
       _send_key(session, "Space") + _wait(session, "Playing") +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
-      _capture(session, out)
-    _run_case(env, "arkanoid", consume command, out, recover val ["final status Playing"; "terminal restored"; "__EXIT:0"] end)
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "arkanoid", consume command, out, recover val ["arkanoid auto animation observed"; "final status Playing"; "terminal restored"] end)
 
   fun _run_counter_preview_parity(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-counter-preview-parity.out"

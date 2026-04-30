@@ -1831,6 +1831,8 @@ primitive NativeBoon
     let command: String val =
       if name == "interval" then
         _terminal_interval_protocol_command(project, name)
+      elseif (name == "pong") or (name == "arkanoid") then
+        _terminal_game_protocol_command(project, name)
       else
         recover val
           "build/bin/boonpony protocol-smoke " + _shell_quote(project) +
@@ -1859,6 +1861,38 @@ primitive NativeBoon
     let blank = CellGrid(width, height, fill)
     let changed = grid.changed_cells(blank)
     TerminalFrame(text, ids, changed, AnsiRenderer.full(grid).size(), width, height, true, "generated-protocol")
+
+  fun _terminal_game_protocol_command(project: String, name: String): String val =>
+    let capture: String val = recover val "build/cache/protocol-" + name + ".jsonl" end
+    let report: String val = recover val "build/reports/protocol-smoke-" + name + "-terminal.json" end
+    let output: String val = recover val "build/cache/protocol-smoke-" + name + "-terminal.out" end
+    let body = String
+    body.append("build/bin/boonpony build ")
+    body.append(_shell_quote(project))
+    body.append(" --report ")
+    body.append(_shell_quote(report))
+    body.append(" >/dev/null 2>&1 && printf '%s\\n'")
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}"))
+    var ticks: USize = 0
+    while ticks < 10 do
+      body.append(" ")
+      body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"expected_action\",\"action\":\"wait\"}"))
+      ticks = ticks + 1
+    end
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"frame\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"tree\"}"))
+    body.append(" ")
+    body.append(_shell_quote("{\"protocol_version\":1,\"type\":\"quit\"}"))
+    body.append(" | ")
+    body.append(_shell_quote("build/bin/generated/" + name))
+    body.append(" --protocol > ")
+    body.append(_shell_quote(capture))
+    body.append(" 2> ")
+    body.append(_shell_quote(output))
+    recover val body.clone() end
 
   fun _terminal_interval_protocol_command(project: String, name: String): String val =>
     let capture: String val = recover val "build/cache/protocol-" + name + ".jsonl" end
