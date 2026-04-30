@@ -45,6 +45,7 @@ class iso PlaygroundNotify is InputNotify
       _histories.push(Array[String])
       index = index + 1
     end
+    _focus_text_capture_for_active_tab()
     _render()
 
   fun ref apply(data': Array[U8] iso) =>
@@ -80,6 +81,8 @@ class iso PlaygroundNotify is InputNotify
           if tab == 5 then _mouse_selected_example = true end
         end
       end
+    elseif _handle_source_scroll_command(event) then
+      None
     elseif (not _text_capture) and _handle_source_command(event) then
       None
     else
@@ -90,17 +93,7 @@ class iso PlaygroundNotify is InputNotify
     end
 
   fun ref _handle_source_command(event: String): Bool =>
-    if event == "PageDown" then
-      _source_scroll = _source_scroll + 8
-      true
-    elseif event == "PageUp" then
-      _source_scroll = if _source_scroll > 8 then _source_scroll - 8 else USize(0) end
-      true
-    elseif event == "WheelDown" then
-      _source_scroll = _source_scroll + 3
-      true
-    elseif event == "WheelUp" then
-      _source_scroll = if _source_scroll > 3 then _source_scroll - 3 else USize(0) end
+    if _handle_source_scroll_command(event) then
       true
     elseif event == "r" then
       _rerun = if _dispatch_child_event("Refresh") then NativePlayground.tab_title(_active) + " rerun" else NativePlayground.tab_title(_active) + " rerun unchanged" end
@@ -121,6 +114,23 @@ class iso PlaygroundNotify is InputNotify
       false
     end
 
+  fun ref _handle_source_scroll_command(event: String): Bool =>
+    if event == "PageDown" then
+      _source_scroll = _source_scroll + 8
+      true
+    elseif event == "PageUp" then
+      _source_scroll = if _source_scroll > 8 then _source_scroll - 8 else USize(0) end
+      true
+    elseif event == "WheelDown" then
+      _source_scroll = _source_scroll + 3
+      true
+    elseif event == "WheelUp" then
+      _source_scroll = if _source_scroll > 3 then _source_scroll - 3 else USize(0) end
+      true
+    else
+      false
+    end
+
   fun ref _translate_event(event: String): String =>
     if _active == 5 then
       _translate_text_example_event(event)
@@ -132,63 +142,64 @@ class iso PlaygroundNotify is InputNotify
   fun ref _translate_text_example_event(event: String): String =>
     if event.at("Mouse:", 0) then
       (let x, let y) = NativePlayground.mouse_xy(event)
-      if y == 8 then
-        if x <= 14 then
-          return "TodoToggleAll"
-        else
+      try
+        let rel_x = NativePlayground.todo_preview_x(x)?
+        let line = NativePlayground.todo_preview_line(_env, _active, y)?
+        if line.at("Input:", 0) then
           _text_capture = true
           _text_edit = false
           _text_buffer = ""
-          return ""
-        end
-      elseif (y >= 10) and (y <= 17) then
-        if x <= 5 then
-          return "TodoToggle:" + _row_index_for_list(y).string()
-        elseif x >= 28 then
+          return "TodoFocus:0"
+        elseif NativePlayground.todo_preview_item_line(line) then
+          let item_index = NativePlayground.todo_item_index_for_screen_y(_env, _active, y)?
+          if rel_x <= 4 then
+            _reset_text_capture()
+            return "TodoToggle:" + item_index.string()
+          elseif NativePlayground.todo_preview_delete_click(line, rel_x) then
+            _reset_text_capture()
+            return "TodoDelete:" + item_index.string()
+          else
+            let title = NativePlayground.todo_preview_title(line)
+            _text_capture = true
+            _text_edit = true
+            _text_target_index = item_index
+            _text_buffer = title
+            return "TodoStartEdit:" + item_index.string() + ":" + title
+          end
+        elseif line.contains("All | Active | Completed") then
           _reset_text_capture()
-          return "TodoDelete:" + _row_index_for_list(y).string()
+          if rel_x < 6 then
+            return "TodoFilter:All"
+          elseif rel_x < 15 then
+            return "TodoFilter:Active"
+          elseif rel_x < 28 then
+            return "TodoFilter:Completed"
+          else
+            return "TodoClearCompleted"
+          end
         else
-          _text_capture = true
-          _text_edit = true
-          _text_target_index = _row_index_for_list(y)
-          _text_buffer = ""
           return ""
-        end
-      elseif y >= 18 then
-        if x < 23 then
-          return "TodoFilter:All"
-        elseif x < 35 then
-          return "TodoFilter:Active"
-        elseif x < 50 then
-          return "TodoFilter:Completed"
-        else
-          return "TodoClearCompleted"
         end
       else
-        _text_capture = true
-        _text_edit = false
-        _text_buffer = ""
         return ""
       end
     elseif _text_capture then
       if event == "Enter" then
-        let value = _text_buffer
-        let translated = if _text_edit then "TodoEdit:" + _text_target_index.string() + ":" + value else "TodoCommit:" + value end
         _text_buffer = ""
         _text_edit = false
         _text_capture = true
-        translated
+        "TodoKey:Enter"
       elseif event == "Backspace" then
         if _text_buffer.size() > 0 then
           _text_buffer = recover val _text_buffer.substring(0, (_text_buffer.size() - 1).isize()) end
         end
-        ""
+        "TodoType:" + _text_buffer
       elseif event == "Space" then
         _text_buffer = _text_buffer + " "
-        ""
+        "TodoType:" + _text_buffer
       elseif event.size() == 1 then
         _text_buffer = _text_buffer + event
-        ""
+        "TodoType:" + _text_buffer
       else
         event
       end
@@ -234,6 +245,15 @@ class iso PlaygroundNotify is InputNotify
     else
       _blank_preview_once = false
     end
+    _focus_text_capture_for_active_tab()
+
+  fun ref _focus_text_capture_for_active_tab() =>
+    if _active == 5 then
+      _text_capture = true
+      _text_edit = false
+      _text_buffer = ""
+      _text_target_index = 0
+    end
 
   fun ref _history(active: USize): Array[String] ref =>
     try
@@ -257,6 +277,16 @@ class iso PlaygroundNotify is InputNotify
     _line("source: " + NativePlayground.source_path(_active) + " | wheel/PgUp/PgDn source | r rerun | Shift+R clear state + rerun")
     _line("+ Boon source ----------------------------------------------------------+ Preview ----------------------------------+")
     _render_preview_and_source()
+    _render_terminal_cursor()
+
+  fun ref _render_terminal_cursor() =>
+    if _active == 5 then
+      let row = if _text_edit then 10 + _text_target_index else USize(7) end
+      let col = USize(81) + _text_buffer.size()
+      _env.out.write("\x1B[" + row.string() + ";" + col.string() + "H\x1B[?25h")
+    else
+      _env.out.write("\x1B[?25l")
+    end
 
   fun ref _line(text: String) =>
     _env.out.write(text + "\x1B[K\r\n")
@@ -494,6 +524,53 @@ primitive NativePlayground
     else
       (USize(0), USize(0))
     end
+
+  fun todo_preview_x(x: USize): USize ? =>
+    if x < 74 then error end
+    x - 73
+
+  fun todo_preview_line(env: Env, active: USize, y: USize): String ? =>
+    if y < 6 then error end
+    protocol_preview_lines(env, active)(y - 6)?
+
+  fun todo_preview_item_line(line: String): Bool =>
+    line.at("[ ] ", 0) or line.at("[x] ", 0) or line.at("[edit] ", 0)
+
+  fun todo_item_index_for_screen_y(env: Env, active: USize, y: USize): USize ? =>
+    if y < 6 then error end
+    let target = y - 6
+    var index: USize = 0
+    var row: USize = 0
+    for line in protocol_preview_lines(env, active).values() do
+      if todo_preview_item_line(line) then
+        if row == target then return index end
+        index = index + 1
+      end
+      row = row + 1
+    end
+    error
+
+  fun todo_preview_delete_click(line: String, rel_x: USize): Bool =>
+    try
+      rel_x >= line.find("[del]")?.usize()
+    else
+      false
+    end
+
+  fun todo_preview_title(line: String): String =>
+    let title_start: ISize = if line.at("[edit] ", 0) then 7 else 4 end
+    let delete_at = try line.find("[del]")? else line.size().isize() end
+    let raw: String val = recover val line.substring(title_start, delete_at) end
+    let out = String
+    for ch in raw.values() do
+      if ch != '|' then out.push(ch) end
+    end
+    _trim(out.clone())
+
+  fun _counter_preview_click(x: USize, y: USize): Bool =>
+    (y >= 6) and (y <= 8) and (
+      ((x >= 2) and (x <= 12)) or
+      ((x >= 72) and (x <= 130)))
 
   fun decode_events(data: Array[U8] box): Array[String] val =>
     let events = recover trn Array[String] end
@@ -964,7 +1041,7 @@ primitive NativePlayground
         lines.push(_expected_action("click_button", "", "0"))
       elseif event.at("Mouse:", 0) then
         (let x, let y) = mouse_xy(event)
-        if (((x >= 2) and (x <= 10)) or ((x >= 77) and (x <= 85))) and (y >= 5) and (y <= 8) then
+        if _counter_preview_click(x, y) then
           lines.push(_expected_action("click_button", "", "0"))
         end
       end
@@ -973,7 +1050,7 @@ primitive NativePlayground
         lines.push(_expected_action("click_button", "", "0"))
       elseif event.at("Mouse:", 0) then
         (let x, let y) = mouse_xy(event)
-        if (((x >= 2) and (x <= 10)) or ((x >= 77) and (x <= 85))) and (y >= 5) and (y <= 8) then
+        if _counter_preview_click(x, y) then
           lines.push(_expected_action("click_button", "", "0"))
         end
       end
@@ -997,6 +1074,21 @@ primitive NativePlayground
         lines.push(_expected_action("focus_input", "", "0"))
         lines.push(_expected_action("type", value))
         lines.push(_expected_action("key", "Enter"))
+      elseif event.at("TodoFocus:", 0) then
+        lines.push(_expected_action("focus_input", "", recover val event.substring(10) end))
+      elseif event.at("TodoType:", 0) then
+        lines.push(_expected_action("type", recover val event.substring(9) end))
+      elseif event.at("TodoKey:", 0) then
+        lines.push(_expected_action("key", recover val event.substring(8) end))
+      elseif event.at("TodoStartEdit:", 0) then
+        try
+          let rest: String val = recover val event.substring(14) end
+          let colon = rest.find(":")?
+          let index = rest.substring(0, colon).usize()? + 1
+          let title: String val = recover val rest.substring(colon + 1) end
+          lines.push(_expected_action("focus_input", "", index.string()))
+          lines.push(_expected_action("type", title))
+        end
       elseif event.at("TodoToggle:", 0) then
         let index = try event.substring(11).usize()? + 1 else USize(1) end
         lines.push(_expected_action("click_checkbox", "", index.string()))
@@ -1100,12 +1192,12 @@ primitive NativePlayground
       if frame_line != "" then
         var cursor: ISize = 0
         var count: USize = 0
-        while (cursor < frame_line.size().isize()) and (count < 8) do
+        while (cursor < frame_line.size().isize()) and (count < 20) do
           (let value, let next_cursor) = _json_string_after(frame_line, "\"text\":\"", cursor)?
           for chunk in _preview_chunks(value).values() do
             out.push(chunk)
             count = count + 1
-            if count >= 8 then break end
+            if count >= 20 then break end
           end
           cursor = next_cursor
         end

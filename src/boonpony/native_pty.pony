@@ -7,6 +7,7 @@ primitive NativePty
     let cases = Array[(String, String, String, Array[String] val, Array[String] val)]
     cases.push(_run_counter_interval_protocol(env))
     cases.push(_run_counter_preview_parity(env))
+    cases.push(_run_playground_counter_clicks(env))
     cases.push(_run_todo_protocol_scenarios(env))
     cases.push(_run_pong(env))
     cases.push(_run_arkanoid(env))
@@ -15,6 +16,7 @@ primitive NativePty
     cases.push(_run_playground_source_mouse_wheel(env))
     cases.push(_run_playground_interval_auto(env))
     cases.push(_run_playground_todo_many(env))
+    cases.push(_run_playground_todo_mouse_edit_delete(env))
     cases.push(_run_playground_pong_hold(env))
     cases.push(_run_playground_host_guard(env))
     cases.push(_run_source_edit(env))
@@ -63,6 +65,27 @@ primitive NativePty
       "node tests/scripts/verify_counter_protocol.js > " + _shell_quote(out) + " 2>&1"
     end
     _run_case(env, "counter-preview-parity", command, out, recover val ["counter preview parity ok"; "counter initial=0+ click=1+"; "counter_hold initial=0+ click=1+"] end)
+
+  fun _run_playground_counter_clicks(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-counter-clicks.out"
+    let session = "boonpony_native_pty_playground_counter_clicks"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example counter") +
+      _wait(session, "Boon-Pony TUI | Counter") +
+      _wait(session, "| 0+") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      _send_mouse(session, "76", "6") +
+      _wait(session, "| 1+") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_key(session, "S-Right") +
+      _wait(session, "Boon-Pony TUI | Counter HOLD") +
+      _wait(session, "| 0+") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_mouse(session, "76", "6") +
+      _wait(session, "| 1+") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-counter-clicks", consume command, out, recover val ["Boon-Pony TUI | Counter"; "Boon-Pony TUI | Counter HOLD"; "| 0+"; "| 1+"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_todo_protocol_scenarios(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-todo-protocol.out"
@@ -218,7 +241,7 @@ primitive NativePty
     let session = "boonpony_native_pty_playground_todo_many"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example todo_mvc") +
       _wait(session, "Boon-Pony TUI | TodoMVC") +
-      _send_mouse(session, "20", "8") +
+      _wait(session, "Input: |") +
       _send_literal(session, "One") + _send_key(session, "Enter") +
       _send_literal(session, "Two") + _send_key(session, "Enter") +
       _send_literal(session, "Three") + _send_key(session, "Enter") +
@@ -226,9 +249,34 @@ primitive NativePty
       _send_literal(session, "Five") + _send_key(session, "Enter") +
       _send_literal(session, "Six") + _send_key(session, "Enter") +
       _send_literal(session, "Seven") + _send_key(session, "Enter") +
+      _wait(session, "Seven") +
+      _wait(session, "Input: |") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
       _send_key(session, "Q") + _wait(session, "__EXIT:") +
-      _capture(session, out)
-    _run_case(env, "playground-todo-many", consume command, out, recover val ["Generated child dispatches:"; "Generated child previews: yes"; "Boon source visible: yes"; "terminal restored"; "__EXIT:0"] end)
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-todo-many", consume command, out, recover val ["Input: |"; "Seven"; "Generated child dispatches:"; "Generated child previews: yes"; "Boon source visible: yes"; "terminal restored"; "__EXIT:0"] end)
+
+  fun _run_playground_todo_mouse_edit_delete(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
+    let out = "build/cache/pty-playground-todo-mouse-edit-delete.out"
+    let session = "boonpony_native_pty_playground_todo_mouse_edit_delete"
+    let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example todo_mvc") +
+      _wait(session, "Input: |") +
+      _send_literal(session, "One") +
+      _wait(session, "Input: One|") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
+      _send_key(session, "Enter") +
+      _wait(session, "One") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_mouse(session, "82", "10") +
+      _wait(session, "edit] Buy groceries") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      _send_mouse(session, "120", "10") +
+      _wait(session, "Clean room") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; " +
+      "if tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'Buy groceries.*\\[del\\]'; then echo 'todo delete failed' >> " + _shell_quote(out) + "; exit 1; fi; " +
+      _send_key(session, "Q") + _wait(session, "__EXIT:") +
+      "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " >> " + _shell_quote(out) + "; "
+    _run_case(env, "playground-todo-mouse-edit-delete", consume command, out, recover val ["Input: One|"; "[ ] One"; "[edit] Buy groceries"; "[ ] Clean room"; "[del]"; "terminal restored"; "__EXIT:0"] end)
 
   fun _run_playground_pong_hold(env: Env): (String, String, String, Array[String] val, Array[String] val) =>
     let out = "build/cache/pty-playground-pong-hold.out"

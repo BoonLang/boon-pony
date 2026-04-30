@@ -80,11 +80,11 @@ for (const text of frames) {
 }
 
 const checks = [
-  [0, ["2 items left", "[ ] Buy groceries", "[ ] Clean room"], []],
-  [1, ["3 items left", "[ ] Test todo"], []],
+  [0, ["Input: |", "2 items left", "[ ] Buy groceries", "[ ] Clean room"], []],
+  [1, ["Input: |", "3 items left", "[ ] Test todo"], []],
   [2, ["Filter: Active", "[ ] Clean room", "[ ] Test todo"], ["Buy groceries"]],
   [3, ["Filter: Completed", "[x] Buy groceries"], ["Clean room"]],
-  [4, ["5 items left", "[ ] Walk the dog", "[ ] Feed the cat"], []],
+  [4, ["Input: |", "5 items left", "[ ] Walk the dog", "[ ] Feed the cat"], []],
   [5, ["4 items left", "[x] Test todo"], []],
   [6, ["5 items left", "[ ] Test todo"], []],
   [7, ["0 items left", "[x] Buy groceries", "[x] Feed the cat"], []],
