@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define MAX_HISTORY 512
 #define MAX_TEXT 65536
@@ -51,7 +52,10 @@ typedef struct {
   TTF_Font *font_todo_footer;
   int active;
   int source_scroll;
+  int source_x_scroll;
   int preview_scroll;
+  int width;
+  int height;
   bool running;
   bool script;
   bool todo_focused;
@@ -98,6 +102,21 @@ typedef struct {
   float footer_h;
   int visible_items;
 } TodoLayout;
+
+typedef struct {
+  float left_w;
+  float top_h;
+  float footer_h;
+  float preview_x;
+  float preview_y;
+  float preview_w;
+  float preview_h;
+  float source_x;
+  float source_y;
+  float source_w;
+  float source_h;
+  float status_y;
+} AppLayout;
 
 static void free_history(History *h) {
   for (int i = 0; i < h->len; i++) free(h->items[i]);
@@ -181,6 +200,14 @@ static bool file_exists(const char *path) {
   return true;
 }
 
+static bool file_newer_than(const char *path, const char *dependency) {
+  struct stat path_stat;
+  struct stat dependency_stat;
+  if (stat(path, &path_stat) != 0) return false;
+  if (stat(dependency, &dependency_stat) != 0) return true;
+  return path_stat.st_mtime >= dependency_stat.st_mtime;
+}
+
 static TTF_Font *open_todo_font(float size) {
   const char *paths[] = {
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -200,10 +227,46 @@ static int run_cmd(const char *cmd) {
   return status == 0 ? 0 : 1;
 }
 
+static void update_render_size(App *app) {
+  int w = 1440;
+  int h = 900;
+  SDL_GetCurrentRenderOutputSize(app->renderer, &w, &h);
+  if (w < 1000) w = 1000;
+  if (h < 700) h = 700;
+  app->width = w;
+  app->height = h;
+}
+
+static AppLayout app_layout(App *app) {
+  AppLayout l;
+  l.left_w = 220.0f;
+  l.top_h = 48.0f;
+  l.footer_h = 60.0f;
+  float content_w = (float)app->width - l.left_w;
+  if (content_w < 800.0f) content_w = 800.0f;
+  l.source_w = content_w * 0.36f;
+  if (l.source_w < 380.0f) l.source_w = 380.0f;
+  if (l.source_w > 760.0f) l.source_w = 760.0f;
+  l.preview_w = content_w - l.source_w;
+  if (l.preview_w < 520.0f) {
+    l.preview_w = 520.0f;
+    l.source_w = content_w - l.preview_w;
+  }
+  l.preview_x = l.left_w;
+  l.preview_y = l.top_h;
+  l.preview_h = (float)app->height - l.top_h - l.footer_h;
+  if (l.preview_h < 560.0f) l.preview_h = 560.0f;
+  l.source_x = l.preview_x + l.preview_w;
+  l.source_y = l.top_h;
+  l.source_h = l.preview_h;
+  l.status_y = (float)app->height - l.footer_h + 8.0f;
+  return l;
+}
+
 static bool ensure_generated(const Example *ex) {
   char binary[256];
   snprintf(binary, sizeof(binary), "build/bin/generated/%s", ex->id);
-  if (file_exists(binary)) return true;
+  if (file_exists(binary) && file_newer_than(binary, "build/bin/boonpony") && file_newer_than(binary, ex->source)) return true;
   char quoted[512];
   shell_quote(quoted, sizeof(quoted), ex->project);
   char cmd[1024];
@@ -319,6 +382,7 @@ static void select_example(App *app, int index) {
   if (index < 0 || index >= EXAMPLE_COUNT) return;
   app->active = index;
   app->source_scroll = 0;
+  app->source_x_scroll = 0;
   app->preview_scroll = 0;
   app->todo_focused = (strcmp(EXAMPLES[index].id, "todo_mvc") == 0);
   app->todo_input[0] = '\0';
@@ -332,6 +396,7 @@ static void select_example(App *app, int index) {
 static void clear_active(App *app) {
   free_history(&app->history[app->active]);
   app->preview_scroll = 0;
+  app->source_x_scroll = 0;
   app->todo_focused = (strcmp(EXAMPLES[app->active].id, "todo_mvc") == 0);
   app->todo_input[0] = '\0';
   app->pong_started = false;
@@ -493,20 +558,26 @@ static void parse_todo_model(const char *preview, TodoModel *model) {
   }
 }
 
-static TodoLayout todo_layout_for_count(int item_count) {
+static TodoLayout todo_layout_for_count(App *app, int item_count) {
+  AppLayout app_l = app_layout(app);
   TodoLayout l;
-  l.preview_x = 224.0f;
-  l.preview_y = 52.0f;
-  l.preview_w = 812.0f;
-  l.preview_h = 788.0f;
-  l.card_w = 760.0f;
+  l.preview_x = app_l.preview_x + 4.0f;
+  l.preview_y = app_l.preview_y + 4.0f;
+  l.preview_w = app_l.preview_w - 8.0f;
+  l.preview_h = app_l.preview_h - 8.0f;
+  l.card_w = l.preview_w - 52.0f;
+  if (l.card_w > 860.0f) l.card_w = 860.0f;
+  if (l.card_w < 620.0f) l.card_w = 620.0f;
   l.card_x = l.preview_x + (l.preview_w - l.card_w) / 2.0f;
-  l.card_y = 178.0f;
+  l.card_y = l.preview_y + 126.0f;
   l.input_y = l.card_y;
   l.input_h = 68.0f;
   l.row_h = 58.0f;
   l.visible_items = item_count;
-  if (l.visible_items > 7) l.visible_items = 7;
+  int max_visible = (int)((l.preview_h - 280.0f) / l.row_h);
+  if (max_visible < 3) max_visible = 3;
+  if (max_visible > 10) max_visible = 10;
+  if (l.visible_items > max_visible) l.visible_items = max_visible;
   if (l.visible_items < 0) l.visible_items = 0;
   l.list_y = l.input_y + l.input_h;
   l.footer_h = 42.0f;
@@ -517,7 +588,7 @@ static TodoLayout todo_layout_for_count(int item_count) {
 static void render_todo_mvc(App *app) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
-  TodoLayout l = todo_layout_for_count(model.item_count);
+  TodoLayout l = todo_layout_for_count(app, model.item_count);
   SDL_Color bg = {245, 245, 245, 255};
   SDL_Color white = {254, 254, 254, 255};
   SDL_Color line = {230, 230, 230, 255};
@@ -603,6 +674,8 @@ static void render_todo_mvc(App *app) {
 }
 
 static void render(App *app) {
+  update_render_size(app);
+  AppLayout l = app_layout(app);
   SDL_Color bg = {18, 22, 28, 255};
   SDL_Color panel = {31, 36, 45, 255};
   SDL_Color active = {51, 92, 140, 255};
@@ -612,11 +685,11 @@ static void render(App *app) {
   SDL_SetRenderDrawColor(app->renderer, bg.r, bg.g, bg.b, bg.a);
   SDL_RenderClear(app->renderer);
 
-  fill_rect(app, 0, 0, 220, 900, panel);
-  fill_rect(app, 220, 48, 820, 792, (SDL_Color){24, 29, 36, 255});
-  fill_rect(app, 1040, 48, 400, 792, (SDL_Color){21, 26, 33, 255});
-  stroke_rect(app, 220, 48, 820, 792, border);
-  stroke_rect(app, 1040, 48, 400, 792, border);
+  fill_rect(app, 0, 0, l.left_w, (float)app->height, panel);
+  fill_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, (SDL_Color){24, 29, 36, 255});
+  fill_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, (SDL_Color){21, 26, 33, 255});
+  stroke_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, border);
+  stroke_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, border);
   draw_text(app, "Boon-Pony SDL Playground", 236, 14, ink);
   draw_text(app, EXAMPLES[app->active].hint, 236, 844, muted);
   fill_rect(app, 662, 10, 84, 30, (SDL_Color){54, 96, 67, 255});
@@ -632,30 +705,53 @@ static void render(App *app) {
 
   char lines[MAX_LINES][MAX_LINE];
   int count = 0;
-  int visible = visible_line_count(748);
+  int visible = visible_line_count(l.preview_h - 44.0f);
   if (strcmp(EXAMPLES[app->active].id, "todo_mvc") == 0) {
     render_todo_mvc(app);
   } else {
     split_lines(app->preview, lines, &count);
     if (app->preview_scroll > count - visible) app->preview_scroll = count > visible ? count - visible : 0;
     for (int i = 0; i < visible && i + app->preview_scroll < count; i++) {
-      draw_text(app, lines[i + app->preview_scroll], 244, 72 + (float)i * 19.0f, ink);
+      draw_text(app, lines[i + app->preview_scroll], l.preview_x + 24.0f, l.preview_y + 24.0f + (float)i * 19.0f, ink);
     }
-    draw_scrollbar(app, 1024, 62, 760, count, app->preview_scroll, visible);
+    draw_scrollbar(app, l.preview_x + l.preview_w - 16.0f, l.preview_y + 14.0f, l.preview_h - 32.0f, count, app->preview_scroll, visible);
   }
 
   split_lines(app->source_text, lines, &count);
-  visible = visible_line_count(748);
+  visible = visible_line_count(l.source_h - 70.0f);
   if (app->source_scroll > count - visible) app->source_scroll = count > visible ? count - visible : 0;
+  int max_cols = 0;
+  for (int i = 0; i < count; i++) {
+    int len = (int)strlen(lines[i]);
+    if (len > max_cols) max_cols = len;
+  }
+  int source_chars_visible = (int)((l.source_w - 74.0f) / 9.0f);
+  if (source_chars_visible < 10) source_chars_visible = 10;
+  if (app->source_x_scroll > max_cols - source_chars_visible) app->source_x_scroll = max_cols > source_chars_visible ? max_cols - source_chars_visible : 0;
+  if (app->source_x_scroll < 0) app->source_x_scroll = 0;
   char header[256];
-  snprintf(header, sizeof(header), "%s @ line %d", EXAMPLES[app->active].source, app->source_scroll + 1);
-  draw_text(app, header, 1060, 58, muted);
+  snprintf(header, sizeof(header), "%s @ line %d col %d", EXAMPLES[app->active].source, app->source_scroll + 1, app->source_x_scroll + 1);
+  draw_text(app, header, l.source_x + 20.0f, l.source_y + 10.0f, muted);
   for (int i = 0; i < visible - 1 && i + app->source_scroll < count; i++) {
     char numbered[MAX_LINE + 32];
-    snprintf(numbered, sizeof(numbered), "%3d: %s", i + app->source_scroll + 1, lines[i + app->source_scroll]);
-    draw_text(app, numbered, 1060, 90 + (float)i * 19.0f, ink);
+    const char *source_line = lines[i + app->source_scroll];
+    int len = (int)strlen(source_line);
+    const char *shown = app->source_x_scroll < len ? source_line + app->source_x_scroll : "";
+    snprintf(numbered, sizeof(numbered), "%3d: %s", i + app->source_scroll + 1, shown);
+    draw_text(app, numbered, l.source_x + 20.0f, l.source_y + 42.0f + (float)i * 19.0f, ink);
   }
-  draw_scrollbar(app, 1424, 62, 760, count, app->source_scroll, visible);
+  draw_scrollbar(app, l.source_x + l.source_w - 16.0f, l.source_y + 14.0f, l.source_h - 48.0f, count, app->source_scroll, visible);
+  if (max_cols > source_chars_visible) {
+    float track_x = l.source_x + 20.0f;
+    float track_y = l.source_y + l.source_h - 22.0f;
+    float track_w = l.source_w - 52.0f;
+    fill_rect(app, track_x, track_y, track_w, 8, (SDL_Color){48, 54, 62, 255});
+    float thumb_w = track_w * ((float)source_chars_visible / (float)max_cols);
+    if (thumb_w < 28.0f) thumb_w = 28.0f;
+    float max_first = (float)(max_cols - source_chars_visible);
+    float thumb_x = track_x + (track_w - thumb_w) * ((float)app->source_x_scroll / max_first);
+    fill_rect(app, thumb_x, track_y, thumb_w, 8, (SDL_Color){148, 163, 184, 255});
+  }
   SDL_RenderPresent(app->renderer);
 }
 
@@ -730,7 +826,24 @@ static void event_todo_delete_index(App *app, int row) {
   refresh_preview(app);
 }
 
+static void event_todo_double_click_index(App *app, int row, const char *title) {
+  char payload[MAX_LINE + 32];
+  snprintf(payload, sizeof(payload), "index:%d:%s", row, title);
+  snprintf(app->todo_input, sizeof(app->todo_input), "%s", title);
+  app->todo_focused = true;
+  append_expected(app, app->active, "dblclick_text", payload, -1);
+  refresh_preview(app);
+}
+
 static void event_todo_double_click_title(App *app, const char *title) {
+  TodoModel model;
+  parse_todo_model(app->preview, &model);
+  for (int i = 0; i < model.item_count; i++) {
+    if (strcmp(model.items[i].title, title) == 0) {
+      event_todo_double_click_index(app, i, title);
+      return;
+    }
+  }
   snprintf(app->todo_input, sizeof(app->todo_input), "%s", title);
   app->todo_focused = true;
   append_expected(app, app->active, "dblclick_text", title, -1);
@@ -740,7 +853,7 @@ static void event_todo_double_click_title(App *app, const char *title) {
 static void event_todo_click(App *app, int x, int y, int clicks) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
-  TodoLayout l = todo_layout_for_count(model.item_count);
+  TodoLayout l = todo_layout_for_count(app, model.item_count);
   app->todo_focused = true;
   if ((float)x >= l.card_x && (float)x <= l.card_x + l.card_w && (float)y >= l.input_y && (float)y <= l.input_y + l.input_h) {
     if ((float)x < l.card_x + 64.0f) {
@@ -759,7 +872,7 @@ static void event_todo_click(App *app, int x, int y, int clicks) {
     } else if ((float)x < l.card_x + 72.0f) {
       append_expected(app, app->active, "click_checkbox", NULL, row + 1);
     } else if (clicks >= 2) {
-      event_todo_double_click_title(app, model.items[row].title);
+      event_todo_double_click_index(app, row, model.items[row].title);
       return;
     } else {
       append_expected(app, app->active, "focus_input", NULL, 0);
@@ -782,7 +895,8 @@ static void event_todo_click(App *app, int x, int y, int clicks) {
 }
 
 static void handle_mouse(App *app, int x, int y, int clicks) {
-  if (x < 220) {
+  AppLayout l = app_layout(app);
+  if ((float)x < l.left_w) {
     int index = (y - 16) / 36;
     if (index >= 0 && index < EXAMPLE_COUNT) select_example(app, index);
     return;
@@ -815,21 +929,31 @@ static void handle_mouse_window(App *app, float window_x, float window_y, int cl
   handle_mouse(app, (int)x, (int)y, clicks);
 }
 
-static void handle_wheel_window(App *app, float window_x, float wheel_y) {
+static void handle_wheel_window(App *app, float window_x, float wheel_x, float wheel_y) {
   float x = window_x;
   float y = 0.0f;
   SDL_RenderCoordinatesFromWindow(app->renderer, window_x, 0.0f, &x, &y);
-  int delta = wheel_y > 0 ? -3 : 3;
-  if (x >= 1040) app->source_scroll += delta;
-  else app->preview_scroll += delta;
+  AppLayout l = app_layout(app);
+  if (x >= l.source_x) {
+    if (wheel_x != 0.0f) app->source_x_scroll += wheel_x > 0 ? 8 : -8;
+    else app->source_scroll += wheel_y > 0 ? -3 : 3;
+  } else {
+    app->preview_scroll += wheel_y > 0 ? -3 : 3;
+  }
   if (app->source_scroll < 0) app->source_scroll = 0;
+  if (app->source_x_scroll < 0) app->source_x_scroll = 0;
   if (app->preview_scroll < 0) app->preview_scroll = 0;
 }
 
-static void handle_key(App *app, SDL_Keycode key) {
+static void handle_key(App *app, SDL_Keycode key, SDL_Keymod mod) {
   const char *id = EXAMPLES[app->active].id;
   if (key == SDLK_ESCAPE || key == SDLK_Q) {
     app->running = false;
+  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_LEFT)) {
+    app->source_x_scroll -= 8;
+    if (app->source_x_scroll < 0) app->source_x_scroll = 0;
+  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_RIGHT)) {
+    app->source_x_scroll += 8;
   } else if (key == SDLK_TAB || key == SDLK_RIGHT) {
     select_example(app, (app->active + 1) % EXAMPLE_COUNT);
   } else if (key == SDLK_LEFT) {
@@ -873,13 +997,14 @@ static void pump_timers(App *app) {
 static bool init_sdl(App *app, bool script) {
   if (!SDL_Init(SDL_INIT_VIDEO)) return false;
   if (!TTF_Init()) return false;
-  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
   if (script) flags |= SDL_WINDOW_HIDDEN;
-  app->window = SDL_CreateWindow("Boon-Pony SDL Playground", 1440, 900, flags);
+  else flags |= SDL_WINDOW_MAXIMIZED;
+  app->window = SDL_CreateWindow("Boon-Pony SDL Playground", 1600, 1000, flags);
   if (!app->window) return false;
   app->renderer = SDL_CreateRenderer(app->window, NULL);
   if (!app->renderer) return false;
-  if (!SDL_SetRenderLogicalPresentation(app->renderer, 1440, 900, SDL_LOGICAL_PRESENTATION_LETTERBOX)) return false;
+  update_render_size(app);
   app->font = TTF_OpenFont(".boon-local/gui/fonts/JetBrainsMono-Regular.ttf", 15.0f);
   if (!app->font) return false;
   app->font_todo_title = open_todo_font(84.0f);
@@ -913,6 +1038,9 @@ static void write_report(const char *path, const char *status, App *app, int fra
     "  \"status\":\"%s\",\n"
     "  \"backend\":\"sdl3\",\n"
     "  \"video_driver\":\"%s\",\n"
+    "  \"renderer\":\"%s\",\n"
+    "  \"window_width\":%d,\n"
+    "  \"window_height\":%d,\n"
     "  \"native_window_verified\":true,\n"
     "  \"generated_protocol_children\":true,\n"
     "  \"active_example\":\"%s\",\n"
@@ -924,6 +1052,9 @@ static void write_report(const char *path, const char *status, App *app, int fra
     "}\n",
     status,
     SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "unknown",
+    app->renderer ? (SDL_GetRendererName(app->renderer) ? SDL_GetRendererName(app->renderer) : "unknown") : "none",
+    app->width,
+    app->height,
     EXAMPLES[app->active].id,
     frames,
     app->script_check_count,
@@ -995,10 +1126,23 @@ static void expect_todo_item(App *app, const char *name, const char *title, int 
   record_check(app, EXAMPLES[app->active].id, name, todo_model_has_item(&model, title, completed), title);
 }
 
+static void expect_todo_editing_index(App *app, const char *name, int editing_index, const char *title) {
+  TodoModel model;
+  parse_todo_model(app->preview, &model);
+  bool pass = (editing_index >= 0) && (editing_index < model.item_count) &&
+    model.items[editing_index].editing && (strcmp(model.items[editing_index].title, title) == 0);
+  for (int i = 0; i < model.item_count; i++) {
+    if ((i != editing_index) && model.items[i].editing) pass = false;
+  }
+  char expected[128];
+  snprintf(expected, sizeof(expected), "editing_index=%d title=%s", editing_index, title);
+  record_check(app, EXAMPLES[app->active].id, name, pass, expected);
+}
+
 static void expect_todo_visual_contract(App *app) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
-  TodoLayout l = todo_layout_for_count(model.item_count);
+  TodoLayout l = todo_layout_for_count(app, model.item_count);
   bool pass = (l.card_w >= 600.0f) && (l.input_h >= 60.0f) && (l.row_h >= 54.0f) && model.input_focused && (model.item_count >= 2);
   record_check(app, EXAMPLES[app->active].id, "styled TodoMVC card matches reference structure", pass, "large title, white card, focused input, rows, filters, footer");
 }
@@ -1006,9 +1150,15 @@ static void expect_todo_visual_contract(App *app) {
 static void expect_todo_scroll_contract(App *app, const char *name) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
-  TodoLayout l = todo_layout_for_count(model.item_count);
+  TodoLayout l = todo_layout_for_count(app, model.item_count);
   bool pass = (model.item_count > l.visible_items) && (app->preview_scroll > 0) && (app->preview_scroll <= model.item_count - l.visible_items);
   record_check(app, EXAMPLES[app->active].id, name, pass, "long list has bounded visual scrollbar state");
+}
+
+static void expect_source_horizontal_scroll(App *app, const char *name) {
+  app->source_x_scroll = 24;
+  render(app);
+  record_check(app, EXAMPLES[app->active].id, name, app->source_x_scroll == 24, "code editor horizontal scroll is retained and rendered");
 }
 
 static bool save_screenshot(App *app, const char *path) {
@@ -1045,28 +1195,28 @@ static int run_script(App *app, const char *report) {
       record_check(app, EXAMPLES[app->active].id, "styled TodoMVC screenshot saved", save_screenshot(app, "build/reports/gui-todomvc-visual.bmp"), "build/reports/gui-todomvc-visual.bmp");
       TodoModel click_model;
       parse_todo_model(app->preview, &click_model);
-      TodoLayout click_layout = todo_layout_for_count(click_model.item_count);
+      TodoLayout click_layout = todo_layout_for_count(app, click_model.item_count);
       event_todo_click(app, (int)(click_layout.card_x + 110), (int)(click_layout.input_y + 24), 1);
       expect_todo_model(app, "visual input click keeps focus", 2, 2, "All", "", true);
       event_todo_click(app, (int)(click_layout.card_x + 36), (int)(click_layout.list_y + 29), 1);
       expect_todo_item(app, "visual checkbox click toggles first todo", "Buy groceries", 1);
       parse_todo_model(app->preview, &click_model);
-      click_layout = todo_layout_for_count(click_model.item_count);
+      click_layout = todo_layout_for_count(app, click_model.item_count);
       event_todo_click(app, (int)(click_layout.card_x + 386), (int)(click_layout.footer_y + 20), 1);
       expect_todo_model(app, "visual active filter click", 1, 1, "Active", "", true);
       parse_todo_model(app->preview, &click_model);
-      click_layout = todo_layout_for_count(click_model.item_count);
+      click_layout = todo_layout_for_count(app, click_model.item_count);
       event_todo_click(app, (int)(click_layout.card_x + 318), (int)(click_layout.footer_y + 20), 1);
       expect_todo_model(app, "visual all filter click", 2, 1, "All", "", true);
       parse_todo_model(app->preview, &click_model);
-      click_layout = todo_layout_for_count(click_model.item_count);
+      click_layout = todo_layout_for_count(app, click_model.item_count);
       event_todo_click(app, (int)(click_layout.card_x + 120), (int)(click_layout.list_y + click_layout.row_h + 24), 2);
       expect_contains(app, "visual double click enters edit mode", "[edit] Clean room|");
       event_todo_set_text(app, "Clean room edited");
       event_todo_key(app, "Enter");
       expect_todo_item(app, "visual edit commits", "Clean room edited", 0);
       parse_todo_model(app->preview, &click_model);
-      click_layout = todo_layout_for_count(click_model.item_count);
+      click_layout = todo_layout_for_count(app, click_model.item_count);
       event_todo_click(app, (int)(click_layout.card_x + click_layout.card_w - 32), (int)(click_layout.list_y + click_layout.row_h + 24), 1);
       expect_not_contains(app, "visual delete button removes row", "Clean room edited");
 
@@ -1085,6 +1235,14 @@ static int run_script(App *app, const char *report) {
       event_todo_text(app, "Gamma");
       event_todo_key(app, "Enter");
       expect_contains(app, "added Gamma", "Gamma");
+      event_todo_set_text(app, "Duplicate");
+      event_todo_key(app, "Enter");
+      event_todo_set_text(app, "Duplicate");
+      event_todo_key(app, "Enter");
+      event_todo_double_click_index(app, 6, "Duplicate");
+      expect_todo_editing_index(app, "duplicate titles edit clicked row by index", 6, "Duplicate");
+      event_todo_key(app, "Escape");
+      expect_not_contains(app, "duplicate edit cancel clears edit mode", "[edit]");
       append_expected(app, app->active, "click_checkbox", NULL, 3);
       refresh_preview(app);
       expect_contains(app, "toggle third item", "[x] Alpha");
@@ -1137,6 +1295,7 @@ static int run_script(App *app, const char *report) {
       event_todo_filter(app, "Completed");
       expect_todo_model(app, "completed filter can be selected with no matches", 0, 22, "Completed", "", true);
       event_todo_filter(app, "All");
+      expect_source_horizontal_scroll(app, "source editor horizontal scroll");
     } else if (strcmp(id, "pong") == 0) {
       expect_contains(app, "initial pong prompt", "Press Space");
       event_pong(app, "Space");
@@ -1204,9 +1363,9 @@ int main(int argc, char **argv) {
       if (event.type == SDL_EVENT_QUIT) app.running = false;
       else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) handle_mouse_window(&app, event.button.x, event.button.y, event.button.clicks);
       else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        handle_wheel_window(&app, event.wheel.mouse_x, event.wheel.y);
+        handle_wheel_window(&app, event.wheel.mouse_x, event.wheel.x, event.wheel.y);
       } else if (event.type == SDL_EVENT_KEY_DOWN) {
-        handle_key(&app, event.key.key);
+        handle_key(&app, event.key.key, event.key.mod);
       } else if (event.type == SDL_EVENT_TEXT_INPUT) {
         if (strcmp(EXAMPLES[app.active].id, "todo_mvc") == 0) event_todo_text(&app, event.text.text);
       }

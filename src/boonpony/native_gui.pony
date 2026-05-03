@@ -562,15 +562,17 @@ primitive NativeGui
     (@system("test -f .boon-local/gui/fonts/JetBrainsMono-Regular.ttf -a -f .boon-local/gui/fonts/Inter-Regular.woff2".cstring()) == 0)
 
   fun _local_bridge_smoke(): Bool =>
-    (@system("test -x .boon-local/gui/bin/boon_sdl_bridge_smoke && SDL_VIDEODRIVER=dummy LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_bridge_smoke >/dev/null 2>&1".cstring()) == 0)
+    (@system("test -x .boon-local/gui/bin/boon_sdl_bridge_smoke && SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_bridge_smoke >/dev/null 2>&1".cstring()) == 0)
 
   fun _local_sdl_playground(): Bool =>
-    (@system("test -x .boon-local/gui/bin/boon_sdl_playground && SDL_VIDEODRIVER=dummy LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_playground --script tests/examples/gui_playground_sequence.json --report build/cache/gui-sdl-doctor.json >/dev/null 2>&1".cstring()) == 0)
+    (@system("test -x .boon-local/gui/bin/boon_sdl_playground && SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_playground --script tests/examples/gui_playground_sequence.json --report build/cache/gui-sdl-doctor.json >/dev/null 2>&1".cstring()) == 0)
 
   fun _sdl_playground_command(example: String, script: String, report: String): String =>
     let command = String
     if script != "" then
-      command.append("SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-dummy} ")
+      command.append("SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-dummy} SDL_RENDER_DRIVER=software ")
+    else
+      command.append("SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-wayland} SDL_RENDER_DRIVER=${SDL_RENDER_DRIVER:-gpu} ")
     end
     command.append("LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} ")
     command.append(".boon-local/gui/bin/boon_sdl_playground --example ")

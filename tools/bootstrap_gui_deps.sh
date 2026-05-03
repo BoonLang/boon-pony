@@ -138,7 +138,7 @@ build_bridge_smoke() {
   cc "$ROOT/native/boon_sdl_bridge_smoke.c" \
     -o "$BIN/boon_sdl_bridge_smoke" \
     $(pkg-config --cflags --libs sdl3 sdl3-ttf)
-  SDL_VIDEODRIVER=dummy "$BIN/boon_sdl_bridge_smoke" >/dev/null
+  SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software "$BIN/boon_sdl_bridge_smoke" >/dev/null
 }
 
 build_sdl_playground() {
@@ -148,7 +148,7 @@ build_sdl_playground() {
     -o "$BIN/boon_sdl_playground" \
     -Wall -Wextra -Wno-unused-parameter \
     $(pkg-config --cflags --libs sdl3 sdl3-ttf)
-  SDL_VIDEODRIVER=dummy "$BIN/boon_sdl_playground" \
+  SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software "$BIN/boon_sdl_playground" \
     --script tests/examples/gui_playground_sequence.json \
     --report "$LOCAL/sdl_playground_smoke.json" >/dev/null
 }
@@ -182,8 +182,8 @@ check_install() {
   [[ -f "$FONTS/Inter-Regular.woff2" ]] || { printf 'missing local Inter font\n' >&2; return 1; }
   [[ -x "$BIN/boon_sdl_bridge_smoke" ]] || { printf 'missing local bridge smoke binary\n' >&2; return 1; }
   [[ -x "$BIN/boon_sdl_playground" ]] || { printf 'missing local SDL playground binary\n' >&2; return 1; }
-  SDL_VIDEODRIVER=dummy "$BIN/boon_sdl_bridge_smoke" >/dev/null
-  SDL_VIDEODRIVER=dummy "$BIN/boon_sdl_playground" --script tests/examples/gui_playground_sequence.json --report "$LOCAL/sdl_playground_check.json" >/dev/null
+  SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software "$BIN/boon_sdl_bridge_smoke" >/dev/null
+  SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software "$BIN/boon_sdl_playground" --script tests/examples/gui_playground_sequence.json --report "$LOCAL/sdl_playground_check.json" >/dev/null
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
