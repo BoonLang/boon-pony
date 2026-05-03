@@ -421,7 +421,7 @@ primitive NativePlayground
     env.input(PlaygroundNotify(env, example, report), 64)
 
   fun reset_live_cache() =>
-    @system("rm -f build/cache/protocol-counter.jsonl build/cache/protocol-counter_hold.jsonl build/cache/protocol-interval.jsonl build/cache/protocol-interval_hold.jsonl build/cache/protocol-cells.jsonl build/cache/protocol-todo_mvc.jsonl build/cache/protocol-pong.jsonl build/cache/protocol-arkanoid.jsonl build/cache/protocol-temperature_converter.jsonl build/cache/protocol-flight_booker.jsonl build/cache/protocol-timer.jsonl build/cache/protocol-crud.jsonl build/cache/protocol-circle_drawer.jsonl build/cache/playground-active.txt build/cache/playground-interval-*.txt build/cache/playground-interval_hold-*.txt".cstring())
+    @system("rm -f build/cache/protocol-counter.jsonl build/cache/protocol-counter_hold.jsonl build/cache/protocol-interval.jsonl build/cache/protocol-interval_hold.jsonl build/cache/protocol-fibonacci.jsonl build/cache/protocol-cells.jsonl build/cache/protocol-todo_mvc.jsonl build/cache/protocol-pong.jsonl build/cache/protocol-arkanoid.jsonl build/cache/protocol-temperature_converter.jsonl build/cache/protocol-flight_booker.jsonl build/cache/protocol-timer.jsonl build/cache/protocol-crud.jsonl build/cache/protocol-circle_drawer.jsonl build/cache/playground-active.txt build/cache/playground-interval-*.txt build/cache/playground-interval_hold-*.txt".cstring())
 
   fun write_active_state(env: Env, active: USize, source_edit: Bool, source_scroll: USize) =>
     _write_file(env, "build/cache/playground-active.txt", tab_id(active) + "\n" + (if source_edit then "1" else "0" end) + "\n" + source_scroll.string() + "\n")
@@ -785,7 +785,7 @@ primitive NativePlayground
   fun _starts_at(text: String, prefix: String, cursor: ISize): Bool =>
     text.at(prefix, cursor)
 
-  fun tab_count(): USize => 13
+  fun tab_count(): USize => 14
 
   fun tab_id(index: USize): String =>
     match index
@@ -802,6 +802,7 @@ primitive NativePlayground
     | 10 => "timer"
     | 11 => "crud"
     | 12 => "circle_drawer"
+    | 13 => "fibonacci"
     else "counter"
     end
 
@@ -825,6 +826,8 @@ primitive NativePlayground
     | "crud" => 11
     | "circle_drawer" => 12
     | "circle" => 12
+    | "fibonacci" => 13
+    | "fib" => 13
     else 0
     end
 
@@ -843,6 +846,7 @@ primitive NativePlayground
     | 10 => "Timer"
     | 11 => "CRUD"
     | 12 => "Circle Drawer"
+    | 13 => "Fibonacci"
     else "Counter"
     end
 
@@ -873,6 +877,7 @@ primitive NativePlayground
     | 10 => "Timer"
     | 11 => "CRUD"
     | 12 => "Circle"
+    | 13 => "Fib"
     else "Counter"
     end
 
@@ -891,6 +896,7 @@ primitive NativePlayground
     | 10 => "Timer: Space or u advances elapsed time."
     | 11 => "CRUD: a creates Ada Lovelace."
     | 12 => "Circle Drawer: mouse adds a circle, u undoes."
+    | 13 => "Fibonacci: generated Boon output from the recursive Fibonacci example."
     else "This example accepts its listed generated actions."
     end
 

@@ -8,6 +8,7 @@ actor Main
       | "--help" => Help.root(env)
       | "-h" => Help.root(env)
       | "tui" => _command_tui(env)
+      | "gui" => _command_gui(env)
       | "play" => _command_play(env)
       | "manifest" => _command_manifest(env)
       | "import-upstream" => _command_import_upstream(env)
@@ -20,6 +21,7 @@ actor Main
       | "verify" => _command_verify(env)
       | "verify-terminal" => _command_verify_terminal(env)
       | "verify-terminal-safety" => _command_verify_terminal_safety(env)
+      | "verify-gui" => _command_verify_gui(env)
       | "verify-pty" => _command_verify_pty(env)
       | "snapshot" => _command_snapshot(env)
       | "protocol-smoke" => _command_protocol_smoke(env)
@@ -31,6 +33,61 @@ actor Main
       end
     else
       Help.root(env)
+    end
+
+  fun _command_gui(env: Env) =>
+    if _has_help(env) then
+      Help.gui(env)
+      return
+    end
+
+    var example: String = ""
+    var backend: String = ""
+    var script: String = ""
+    var report: String = ""
+    var doctor = false
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--doctor" then
+          doctor = true
+          index = index + 1
+        elseif arg == "--example" then
+          example = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--backend" then
+          backend = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--script" then
+          script = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--report" then
+          report = env.args(index + 1)?
+          index = index + 2
+        else
+          env.err.print("error: unknown gui option: " + arg)
+          Help.gui(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: gui option is missing a value")
+        Help.gui(env)
+        env.exitcode(2)
+        return
+      end
+    end
+    if doctor then
+      if (example != "") or (backend != "") or (script != "") or (report != "") then
+        env.err.print("error: --doctor cannot be combined with other gui options")
+        Help.gui(env)
+        env.exitcode(2)
+      else
+        NativeGui.doctor_command(env)
+      end
+    else
+      NativeGui.gui_command(env, example, backend, script, report)
     end
 
   fun _command_tui(env: Env) =>
@@ -568,6 +625,43 @@ actor Main
     end
     NativeSafety.verify_command(env, pty, report)
 
+  fun _command_verify_gui(env: Env) =>
+    if _has_help(env) then
+      Help.verify_gui(env)
+      return
+    end
+
+    var all = false
+    var backend: String = ""
+    var report: String = ""
+    var index: USize = 2
+    while index < env.args.size() do
+      try
+        let arg = env.args(index)?
+        if arg == "--all" then
+          all = true
+          index = index + 1
+        elseif arg == "--backend" then
+          backend = env.args(index + 1)?
+          index = index + 2
+        elseif arg == "--report" then
+          report = env.args(index + 1)?
+          index = index + 2
+        else
+          env.err.print("error: unknown verify-gui option: " + arg)
+          Help.verify_gui(env)
+          env.exitcode(2)
+          return
+        end
+      else
+        env.err.print("error: verify-gui option is missing a value")
+        Help.verify_gui(env)
+        env.exitcode(2)
+        return
+      end
+    end
+    NativeGui.verify_command(env, all, backend, report)
+
   fun _command_verify_pty(env: Env) =>
     if _has_help(env) then
       Help.verify_pty(env)
@@ -652,6 +746,7 @@ primitive Help
     env.out.print("Usage:")
     env.out.print("  boonpony --help")
     env.out.print("  boonpony tui [--help] [--example <name>] [--script <path>]")
+    env.out.print("  boonpony gui [--help] [--example <name>] [--backend headless|sdl3]")
     env.out.print("  boonpony play [--help] <project>")
     env.out.print("  boonpony manifest --check")
     env.out.print("  boonpony import-upstream --source <path-or-git-url> --commit <sha>")
@@ -665,6 +760,7 @@ primitive Help
     env.out.print("  boonpony verify <project-or---all>")
     env.out.print("  boonpony verify-terminal <project-or---all> [--filter playground]")
     env.out.print("  boonpony verify-terminal-safety --pty")
+    env.out.print("  boonpony verify-gui --all [--backend headless|sdl3]")
     env.out.print("  boonpony verify-pty --all")
     env.out.print("  boonpony snapshot <project> --size 80x24 --frames 120")
     env.out.print("  boonpony bench <project-or---all>")
@@ -684,6 +780,23 @@ primitive Help
     env.out.print("Phase 12 status:")
     env.out.print("  The playground supports full-screen mode, scripted replay, PTY verification, and source editing.")
     env.out.print("  Source keys: e edit, v valid edit, ! invalid edit, r reload, b rebuild, p rerun, d diff, o editor.")
+
+  fun gui(env: Env) =>
+    env.out.print("boonpony gui - native graphical playground addendum")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony gui")
+    env.out.print("  boonpony gui --doctor")
+    env.out.print("  boonpony gui --example todo_mvc")
+    env.out.print("  boonpony gui --backend headless --report build/reports/gui-playground.json")
+    env.out.print("  boonpony gui --script tests/examples/gui_playground_sequence.json")
+    env.out.print("")
+    env.out.print("Status:")
+    env.out.print("  Headless GraphScene/report rendering is built in.")
+    env.out.print("  SDL3 verification prefers repo-local deps from .boon-local/gui.")
+    env.out.print("  Run tools/bootstrap_gui_deps.sh to install project-local SDL3, SDL_ttf, fonts, and the C smoke bridge.")
+    env.out.print("  Set BOON_PONY_USE_SYSTEM_SDL3=1 only for explicit system SDL3 experiments.")
+    env.out.print("  The full native SDL3 window path is not complete until a real window bridge is built and verified.")
 
   fun play(env: Env) =>
     env.out.print("boonpony play - build and run a generated terminal app")
@@ -773,6 +886,13 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony verify-terminal-safety --pty")
+
+  fun verify_gui(env: Env) =>
+    env.out.print("boonpony verify-gui - verify graphical playground scenes")
+    env.out.print("")
+    env.out.print("Usage:")
+    env.out.print("  boonpony verify-gui --all --backend headless --report build/reports/verify-gui-headless.json")
+    env.out.print("  boonpony verify-gui --all --backend sdl3 --report build/reports/verify-gui-sdl3.json")
 
   fun verify_pty(env: Env) =>
     env.out.print("boonpony verify-pty - run real PTY smoke proofs")

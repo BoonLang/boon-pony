@@ -1,0 +1,33 @@
+{
+  "name": "gui-playground-sequence",
+  "backend": "headless",
+  "viewport": { "width": 1440, "height": 900, "scale": 1.0 },
+  "steps": [
+    { "action": "select_example", "example": "counter" },
+    { "action": "click", "target": "counter.increment" },
+    { "action": "select_example", "example": "counter_hold" },
+    { "action": "click", "target": "counter_hold.increment" },
+    { "action": "select_example", "example": "interval" },
+    { "action": "tick", "ms": 1000 },
+    { "action": "select_example", "example": "interval_hold" },
+    { "action": "tick", "ms": 1000 },
+    { "action": "select_example", "example": "fibonacci" },
+    { "action": "select_example", "example": "cells" },
+    { "action": "edit_cell", "cell": "A1", "text": "7" },
+    { "action": "select_example", "example": "todo_mvc" },
+    { "action": "type_text", "target": "todo_mvc.new_todo", "text": "One" },
+    { "action": "press", "key": "Enter" },
+    { "action": "select_example", "example": "pong" },
+    { "action": "press", "key": "Space" },
+    { "action": "hold", "key": "W", "frames": 12 },
+    { "action": "select_example", "example": "arkanoid" },
+    { "action": "press", "key": "Space" }
+  ],
+  "assertions": [
+    "scene has draw commands",
+    "scene has hit regions",
+    "scene has semantic ids",
+    "scene references Boon source",
+    "scene is generated-protocol backed"
+  ]
+}

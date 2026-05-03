@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "local_prefix": ".boon-local/gui",
+  "dependencies": {
+    "sdl3": {
+      "version": "3.2.10",
+      "url": "https://github.com/libsdl-org/SDL/releases/download/release-3.2.10/SDL3-3.2.10.tar.gz",
+      "sha256": "f87be7b4dec66db4098e9c167b2aa34e2ca10aeb5443bdde95ae03185ed513e0",
+      "pkg_config": "sdl3"
+    },
+    "sdl3_ttf": {
+      "version": "3.2.2",
+      "url": "https://github.com/libsdl-org/SDL_ttf/releases/download/release-3.2.2/SDL3_ttf-3.2.2.tar.gz",
+      "sha256": "63547d58d0185c833213885b635a2c0548201cc8f301e6587c0be1a67e1e045d",
+      "pkg_config": "sdl3-ttf",
+      "vendored": {
+        "freetype": {
+          "url": "https://github.com/libsdl-org/freetype.git",
+          "revision": "9973564cfa63763a3e4ac67c09147899539b1e07",
+          "branch": "VER-2-13-2-SDL"
+        }
+      }
+    },
+    "fonts": {
+      "JetBrainsMono-Regular.ttf": {
+        "source": "JetBrains/JetBrainsMono",
+        "revision": "cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9",
+        "url": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9/fonts/ttf/JetBrainsMono-Regular.ttf",
+        "sha256": "a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f"
+      },
+      "Inter-Regular.woff2": {
+        "source": "rsms/inter",
+        "revision": "e3a3d4c57d5ecc01453a575621882a384c1995a3",
+        "url": "https://raw.githubusercontent.com/rsms/inter/e3a3d4c57d5ecc01453a575621882a384c1995a3/docs/font-files/Inter-Regular.woff2",
+        "sha256": "e06f6b1bc553aaea4e4668023ed0ab0a147129c3107f511bc7d03d361b0ae085"
+      }
+    },
+    "boon_sdl_bridge_smoke": {
+      "version": "0.1.0",
+      "source": "native/boon_sdl_bridge_smoke.c",
+      "description": "Repo-local C smoke bridge used by verify-gui --backend sdl3 to prove local SDL3 and SDL_ttf link/run without claiming the full native Pony window bridge is complete."
+    },
+    "boon_sdl_playground": {
+      "version": "0.1.0",
+      "source": "native/boon_sdl_playground.c",
+      "description": "Repo-local SDL3 playground bridge. It renders a native SDL window and drives generated Pony protocol children for the selected Boon examples."
+    }
+  }
+}
