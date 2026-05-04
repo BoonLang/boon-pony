@@ -7,8 +7,15 @@ cd "$ROOT"
 REPORT="${1:-build/reports/gui-sdl-live.json}"
 mkdir -p "$(dirname "$REPORT")" build/cache
 
+cmd=(env SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}" SDL_RENDER_DRIVER="${SDL_RENDER_DRIVER:-gpu}" build/bin/boonpony gui --backend sdl3 --report "$REPORT")
+
 if command -v cosmic-background-launch >/dev/null 2>&1; then
-  exec cosmic-background-launch -- env SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}" SDL_RENDER_DRIVER="${SDL_RENDER_DRIVER:-gpu}" build/bin/boonpony gui --backend sdl3 --report "$REPORT"
+  if cosmic-background-launch --workspace boon-pony -- "${cmd[@]}"; then
+    exit 0
+  fi
+  if cosmic-background-launch -- "${cmd[@]}"; then
+    exit 0
+  fi
 fi
 
-exec env SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}" SDL_RENDER_DRIVER="${SDL_RENDER_DRIVER:-gpu}" build/bin/boonpony gui --backend sdl3 --report "$REPORT"
+exec "${cmd[@]}"

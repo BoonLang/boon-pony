@@ -4,11 +4,16 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define MAX_HISTORY 512
 #define MAX_TEXT 65536
@@ -43,8 +48,35 @@ typedef struct {
 } History;
 
 typedef struct {
+  bool active;
+  int example;
+  pid_t pid;
+  int in_fd;
+  int out_fd;
+  char output[MAX_TEXT];
+} ProtocolSession;
+
+typedef struct {
+  bool initialized;
+  int target_x;
+  int target_y;
+  int target_left_y;
+  int target_right_y;
+  int target_paddle_x;
+  float from_x;
+  float from_y;
+  float x;
+  float y;
+  float left_y;
+  float right_y;
+  float paddle_x;
+  Uint64 changed_ms;
+} GameVisual;
+
+typedef struct {
   SDL_Window *window;
   SDL_Renderer *renderer;
+  SDL_Texture *source_cache;
   TTF_Font *font;
   TTF_Font *font_todo_title;
   TTF_Font *font_todo_input;
@@ -56,18 +88,30 @@ typedef struct {
   int preview_scroll;
   int width;
   int height;
+  int source_cache_w;
+  int source_cache_h;
+  int source_cache_active;
+  int source_cache_scroll;
+  int source_cache_x_scroll;
   bool running;
   bool script;
   bool todo_focused;
   bool pong_started;
+  bool game_refresh_pending;
+  bool dirty;
   Uint64 last_interval_ms;
   Uint64 last_pong_ms;
+  Uint64 last_render_ms;
   char todo_input[MAX_LINE];
   char preview[MAX_TEXT];
   char source_text[MAX_TEXT];
   char script_checks[MAX_TEXT];
   int script_check_count;
   int script_failure_count;
+  int live_sent_len[EXAMPLE_COUNT];
+  ProtocolSession session;
+  GameVisual pong_visual;
+  GameVisual arkanoid_visual;
   History history[EXAMPLE_COUNT];
 } App;
 
@@ -290,6 +334,17 @@ static void json_unescape_to(char *dst, size_t dst_size, const char *start, cons
   dst[pos] = '\0';
 }
 
+static void append_bounded(char *dst, size_t dst_size, const char *src) {
+  if (dst_size == 0) return;
+  size_t used = strlen(dst);
+  if (used >= dst_size - 1) return;
+  size_t avail = dst_size - used - 1;
+  size_t len = strlen(src);
+  if (len > avail) len = avail;
+  memcpy(dst + used, src, len);
+  dst[used + len] = '\0';
+}
+
 static void extract_last_frame_text(const char *jsonl, char *out, size_t out_size) {
   const char *last = NULL;
   const char *p = jsonl;
@@ -319,14 +374,162 @@ static void extract_last_frame_text(const char *jsonl, char *out, size_t out_siz
     }
     char chunk[MAX_TEXT];
     json_unescape_to(chunk, sizeof(chunk), p, end);
-    if (out[0] != '\0') strncat(out, "\n", out_size - strlen(out) - 1);
-    strncat(out, chunk, out_size - strlen(out) - 1);
+    if (out[0] != '\0') append_bounded(out, out_size, "\n");
+    append_bounded(out, out_size, chunk);
     p = end;
     if (*p == '\n') break;
   }
 }
 
-static bool refresh_preview(App *app) {
+static bool has_protocol_frame(const char *jsonl) {
+  return strstr(jsonl, "\"type\":\"frame\"") != NULL;
+}
+
+static bool write_all_fd(int fd, const char *text, size_t len) {
+  size_t sent = 0;
+  while (sent < len) {
+    ssize_t n = write(fd, text + sent, len - sent);
+    if (n < 0) return false;
+    if (n == 0) return false;
+    sent += (size_t)n;
+  }
+  return true;
+}
+
+static void protocol_session_close(App *app) {
+  ProtocolSession *s = &app->session;
+  if (!s->active) return;
+  if (s->in_fd >= 0) {
+    const char *quit = "{\"protocol_version\":1,\"type\":\"quit\"}\n";
+    (void)write_all_fd(s->in_fd, quit, strlen(quit));
+    close(s->in_fd);
+  }
+  if (s->out_fd >= 0) close(s->out_fd);
+  if (s->pid > 0) {
+    int status = 0;
+    for (int i = 0; i < 8; i++) {
+      pid_t got = waitpid(s->pid, &status, WNOHANG);
+      if (got == s->pid) break;
+      usleep(1000);
+    }
+    if (waitpid(s->pid, &status, WNOHANG) == 0) {
+      kill(s->pid, SIGTERM);
+      (void)waitpid(s->pid, &status, 0);
+    }
+  }
+  memset(s, 0, sizeof(*s));
+  s->pid = -1;
+  s->in_fd = -1;
+  s->out_fd = -1;
+}
+
+static bool protocol_session_start(App *app) {
+  const Example *ex = &EXAMPLES[app->active];
+  ProtocolSession *s = &app->session;
+  if (s->active && s->example == app->active) return true;
+  protocol_session_close(app);
+  if (!ensure_generated(ex)) return false;
+
+  int child_in[2];
+  int child_out[2];
+  if (pipe(child_in) != 0) return false;
+  if (pipe(child_out) != 0) {
+    close(child_in[0]);
+    close(child_in[1]);
+    return false;
+  }
+
+  pid_t pid = fork();
+  if (pid == 0) {
+    dup2(child_in[0], STDIN_FILENO);
+    dup2(child_out[1], STDOUT_FILENO);
+    dup2(child_out[1], STDERR_FILENO);
+    close(child_in[0]);
+    close(child_in[1]);
+    close(child_out[0]);
+    close(child_out[1]);
+    char binary[256];
+    snprintf(binary, sizeof(binary), "build/bin/generated/%s", ex->id);
+    execl(binary, binary, "--protocol", (char *)NULL);
+    _exit(127);
+  }
+
+  close(child_in[0]);
+  close(child_out[1]);
+  if (pid < 0) {
+    close(child_in[1]);
+    close(child_out[0]);
+    return false;
+  }
+
+  int flags = fcntl(child_out[0], F_GETFL, 0);
+  if (flags >= 0) fcntl(child_out[0], F_SETFL, flags | O_NONBLOCK);
+
+  memset(s, 0, sizeof(*s));
+  s->active = true;
+  s->example = app->active;
+  s->pid = pid;
+  s->in_fd = child_in[1];
+  s->out_fd = child_out[0];
+  s->output[0] = '\0';
+  return true;
+}
+
+static void protocol_session_send(ProtocolSession *s, const char *line) {
+  if (!s->active || s->in_fd < 0) return;
+  size_t len = strlen(line);
+  (void)write_all_fd(s->in_fd, line, len);
+  if (len == 0 || line[len - 1] != '\n') (void)write_all_fd(s->in_fd, "\n", 1);
+}
+
+static void protocol_session_drain(ProtocolSession *s, Uint64 timeout_ms) {
+  if (!s->active || s->out_fd < 0) return;
+  Uint64 start = SDL_GetTicks();
+  char buf[4096];
+  while (true) {
+    ssize_t n = read(s->out_fd, buf, sizeof(buf) - 1);
+    if (n > 0) {
+      buf[n] = '\0';
+      size_t used = strlen(s->output);
+      if (used + (size_t)n + 1 >= sizeof(s->output)) {
+        size_t keep = sizeof(s->output) / 2;
+        memmove(s->output, s->output + used - keep, keep + 1);
+      }
+      append_bounded(s->output, sizeof(s->output), buf);
+      continue;
+    }
+    if (n == 0) {
+      s->active = false;
+      return;
+    }
+    if (errno != EAGAIN && errno != EWOULDBLOCK) return;
+    if (SDL_GetTicks() - start >= timeout_ms) return;
+    usleep(1000);
+  }
+}
+
+static bool refresh_preview_live(App *app) {
+  if (!protocol_session_start(app)) {
+    snprintf(app->preview, sizeof(app->preview), "Build failed for %s", EXAMPLES[app->active].title);
+    return false;
+  }
+
+  ProtocolSession *s = &app->session;
+  protocol_session_drain(s, 2);
+  History *h = &app->history[app->active];
+  if (app->live_sent_len[app->active] > h->len) app->live_sent_len[app->active] = 0;
+  for (int i = app->live_sent_len[app->active]; i < h->len; i++) {
+    protocol_session_send(s, h->items[i]);
+  }
+  app->live_sent_len[app->active] = h->len;
+  protocol_session_send(s, "{\"protocol_version\":1,\"type\":\"frame\"}");
+  protocol_session_drain(s, 3);
+  if (!has_protocol_frame(s->output)) protocol_session_drain(s, 250);
+  extract_last_frame_text(s->output, app->preview, sizeof(app->preview));
+  return true;
+}
+
+static bool refresh_preview_replay(App *app) {
   const Example *ex = &EXAMPLES[app->active];
   if (!ensure_generated(ex)) {
     snprintf(app->preview, sizeof(app->preview), "Build failed for %s", ex->title);
@@ -367,6 +570,24 @@ static bool refresh_preview(App *app) {
   return true;
 }
 
+static bool refresh_preview(App *app) {
+  bool ok = !app->script ? refresh_preview_live(app) : refresh_preview_replay(app);
+  app->dirty = true;
+  return ok;
+}
+
+static void invalidate_source_cache(App *app) {
+  if (app->source_cache) {
+    SDL_DestroyTexture(app->source_cache);
+    app->source_cache = NULL;
+  }
+  app->source_cache_w = 0;
+  app->source_cache_h = 0;
+  app->source_cache_active = -1;
+  app->source_cache_scroll = -1;
+  app->source_cache_x_scroll = -1;
+}
+
 static void load_source(App *app) {
   FILE *f = fopen(EXAMPLES[app->active].source, "rb");
   if (!f) {
@@ -376,10 +597,12 @@ static void load_source(App *app) {
   size_t n = fread(app->source_text, 1, sizeof(app->source_text) - 1, f);
   fclose(f);
   app->source_text[n] = '\0';
+  invalidate_source_cache(app);
 }
 
 static void select_example(App *app, int index) {
   if (index < 0 || index >= EXAMPLE_COUNT) return;
+  if (app->active != index) protocol_session_close(app);
   app->active = index;
   app->source_scroll = 0;
   app->source_x_scroll = 0;
@@ -389,17 +612,23 @@ static void select_example(App *app, int index) {
   app->last_interval_ms = SDL_GetTicks();
   app->last_pong_ms = SDL_GetTicks();
   app->pong_started = false;
+  app->game_refresh_pending = false;
+  app->dirty = true;
   load_source(app);
   refresh_preview(app);
 }
 
 static void clear_active(App *app) {
+  protocol_session_close(app);
   free_history(&app->history[app->active]);
+  app->live_sent_len[app->active] = 0;
   app->preview_scroll = 0;
   app->source_x_scroll = 0;
   app->todo_focused = (strcmp(EXAMPLES[app->active].id, "todo_mvc") == 0);
   app->todo_input[0] = '\0';
   app->pong_started = false;
+  app->game_refresh_pending = false;
+  app->dirty = true;
   app->last_interval_ms = SDL_GetTicks();
   app->last_pong_ms = SDL_GetTicks();
   refresh_preview(app);
@@ -461,24 +690,25 @@ static void draw_line(App *app, float x1, float y1, float x2, float y2, SDL_Colo
   SDL_RenderLine(app->renderer, x1, y1, x2, y2);
 }
 
-static void draw_circle(App *app, float cx, float cy, float radius, SDL_Color c) {
+static void fill_circle(App *app, float cx, float cy, float radius, SDL_Color c) {
   SDL_SetRenderDrawColor(app->renderer, c.r, c.g, c.b, c.a);
-  const int segments = 48;
-  float prev_x = cx + radius;
-  float prev_y = cy;
-  for (int i = 1; i <= segments; i++) {
-    float angle = ((float)i / (float)segments) * 6.283185307f;
-    float x = cx + SDL_cosf(angle) * radius;
-    float y = cy + SDL_sinf(angle) * radius;
-    SDL_RenderLine(app->renderer, prev_x, prev_y, x, y);
-    prev_x = x;
-    prev_y = y;
+  int r = (int)(radius + 0.5f);
+  for (int dy = -r; dy <= r; dy++) {
+    float fy = (float)dy;
+    float dx = SDL_sqrtf((radius * radius) - (fy * fy));
+    SDL_RenderLine(app->renderer, cx - dx, cy + fy, cx + dx, cy + fy);
   }
 }
 
 static void draw_checkmark(App *app, float x, float y, SDL_Color c) {
   draw_line(app, x, y + 8, x + 8, y + 17, c);
   draw_line(app, x + 8, y + 17, x + 22, y - 6, c);
+}
+
+static void draw_todo_checkbox(App *app, float cx, float cy, bool checked, SDL_Color ring, SDL_Color fill, SDL_Color mark) {
+  fill_circle(app, cx, cy, 17.5f, ring);
+  fill_circle(app, cx, cy, 14.0f, fill);
+  if (checked) draw_checkmark(app, cx - 10.5f, cy - 4.5f, mark);
 }
 
 static int visible_line_count(float height) {
@@ -498,6 +728,35 @@ static void draw_scrollbar(App *app, float x, float y, float h, int total, int f
 static void trim_right(char *s) {
   size_t len = strlen(s);
   while (len > 0 && isspace((unsigned char)s[len - 1])) s[--len] = '\0';
+}
+
+static void copy_bounded(char *dst, size_t dst_size, const char *src) {
+  if (dst_size == 0) return;
+  size_t len = strlen(src);
+  if (len >= dst_size) len = dst_size - 1;
+  memcpy(dst, src, len);
+  dst[len] = '\0';
+}
+
+static void set_preview_input_echo(App *app) {
+  if (strcmp(EXAMPLES[app->active].id, "todo_mvc") != 0) return;
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->preview, lines, &count);
+  if (count <= 0) return;
+  char next[MAX_TEXT];
+  next[0] = '\0';
+  for (int i = 0; i < count; i++) {
+    if (i > 0) append_bounded(next, sizeof(next), "\n");
+    if (strncmp(lines[i], "Input: ", 7) == 0) {
+      append_bounded(next, sizeof(next), "Input: ");
+      append_bounded(next, sizeof(next), app->todo_input);
+      append_bounded(next, sizeof(next), "|");
+    } else {
+      append_bounded(next, sizeof(next), lines[i]);
+    }
+  }
+  snprintf(app->preview, sizeof(app->preview), "%s", next);
 }
 
 static void remove_cursor_marker(char *s) {
@@ -567,7 +826,9 @@ static TodoLayout todo_layout_for_count(App *app, int item_count) {
   l.preview_h = app_l.preview_h - 8.0f;
   l.card_w = l.preview_w - 52.0f;
   if (l.card_w > 860.0f) l.card_w = 860.0f;
-  if (l.card_w < 620.0f) l.card_w = 620.0f;
+  if (l.card_w > l.preview_w - 16.0f) l.card_w = l.preview_w - 16.0f;
+  if (l.card_w < 360.0f) l.card_w = l.preview_w - 16.0f;
+  if (l.card_w < 280.0f) l.card_w = 280.0f;
   l.card_x = l.preview_x + (l.preview_w - l.card_w) / 2.0f;
   l.card_y = l.preview_y + 126.0f;
   l.input_y = l.card_y;
@@ -585,6 +846,17 @@ static TodoLayout todo_layout_for_count(App *app, int item_count) {
   return l;
 }
 
+static void push_clip(App *app, float x, float y, float w, float h, SDL_Rect *old_clip, bool *old_enabled) {
+  *old_enabled = SDL_RenderClipEnabled(app->renderer);
+  if (*old_enabled) SDL_GetRenderClipRect(app->renderer, old_clip);
+  SDL_Rect clip = {(int)x, (int)y, (int)w, (int)h};
+  SDL_SetRenderClipRect(app->renderer, &clip);
+}
+
+static void pop_clip(App *app, SDL_Rect *old_clip, bool old_enabled) {
+  SDL_SetRenderClipRect(app->renderer, old_enabled ? old_clip : NULL);
+}
+
 static void render_todo_mvc(App *app) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
@@ -599,6 +871,9 @@ static void render_todo_mvc(App *app) {
   SDL_Color red = {176, 76, 76, 255};
 
   fill_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, bg);
+  SDL_Rect old_clip;
+  bool old_clip_enabled = false;
+  push_clip(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, &old_clip, &old_clip_enabled);
 
   const char *todos = "todos";
   int title_w = text_width(app->font_todo_title, todos);
@@ -635,8 +910,7 @@ static void render_todo_mvc(App *app) {
     if (index >= model.item_count) break;
     TodoItem *item = &model.items[index];
     draw_line(app, l.card_x, y + l.row_h, l.card_x + l.card_w, y + l.row_h, line);
-    draw_circle(app, l.card_x + 36, y + 29, 17, item->completed ? green : muted);
-    if (item->completed) draw_checkmark(app, l.card_x + 25, y + 22, green);
+    draw_todo_checkbox(app, l.card_x + 36, y + 29, item->completed, item->completed ? green : muted, white, green);
     if (item->editing) {
       fill_rect(app, l.card_x + 76, y + 8, l.card_w - 150, l.row_h - 16, (SDL_Color){255, 255, 255, 255});
       stroke_rect(app, l.card_x + 76, y + 8, l.card_w - 150, l.row_h - 16, (SDL_Color){180, 180, 180, 255});
@@ -656,21 +930,373 @@ static void render_todo_mvc(App *app) {
   draw_text_with_font(app, app->font_todo_footer, count_text, l.card_x + 18, l.footer_y + 12, ink);
 
   const char *filters[] = {"All", "Active", "Completed"};
-  float fx[] = {l.card_x + 310, l.card_x + 385, l.card_x + 486};
+  const char *clear_label = l.card_w < 650.0f ? "Clear" : "Clear completed";
+  float filter_total_w = 248.0f;
+  float clear_w = (float)text_width(app->font_todo_footer, clear_label);
+  float clear_x = l.card_x + l.card_w - clear_w - 18.0f;
+  float filter_x = l.card_x + (l.card_w - filter_total_w) * 0.52f;
+  float min_filter_x = l.card_x + 132.0f;
+  if (filter_x < min_filter_x) filter_x = min_filter_x;
+  if ((filter_x + filter_total_w) > (clear_x - 10.0f)) filter_x = clear_x - filter_total_w - 10.0f;
+  bool footer_overflows = filter_x < min_filter_x;
+  if (footer_overflows) filter_x = min_filter_x;
+  float fx[] = {filter_x, filter_x + 74.0f, filter_x + 174.0f};
   float fw[] = {42, 68, 104};
   for (int i = 0; i < 3; i++) {
     if (strcmp(model.filter, filters[i]) == 0) stroke_rect(app, fx[i] - 8, l.footer_y + 7, fw[i], 28, red);
     draw_text_with_font(app, app->font_todo_footer, filters[i], fx[i], l.footer_y + 12, ink);
   }
-  draw_text_with_font(app, app->font_todo_footer, "Clear completed", l.card_x + l.card_w - 170, l.footer_y + 12, ink);
+  draw_text_with_font(app, app->font_todo_footer, clear_label, clear_x, l.footer_y + 12, ink);
+  if (footer_overflows) {
+    fill_rect(app, l.card_x + 18, l.footer_y + l.footer_h - 9, l.card_w - 36, 5, (SDL_Color){226, 226, 226, 255});
+    fill_rect(app, l.card_x + 18, l.footer_y + l.footer_h - 9, (l.card_w - 36) * 0.64f, 5, (SDL_Color){150, 150, 150, 255});
+  }
 
   if (model.item_count > l.visible_items) {
     draw_scrollbar(app, l.card_x + l.card_w - 10, l.list_y + 4, l.row_h * (float)l.visible_items - 8, model.item_count, app->preview_scroll, l.visible_items);
   }
 
-  draw_text_with_font(app, app->font_todo_footer, "Double-click to edit a todo", l.card_x + 248, l.footer_y + l.footer_h + 50, ink);
-  draw_text_with_font(app, app->font_todo_footer, "Created by Martin Kavik", l.card_x + 270, l.footer_y + l.footer_h + 84, ink);
-  draw_text_with_font(app, app->font_todo_footer, "Part of TodoMVC", l.card_x + 305, l.footer_y + l.footer_h + 118, ink);
+  const char *hint1 = "Double-click to edit a todo";
+  const char *hint2 = "Created by Martin Kavik";
+  const char *hint3 = "Part of TodoMVC";
+  draw_text_with_font(app, app->font_todo_footer, hint1, l.card_x + (l.card_w - (float)text_width(app->font_todo_footer, hint1)) / 2.0f, l.footer_y + l.footer_h + 50, ink);
+  draw_text_with_font(app, app->font_todo_footer, hint2, l.card_x + (l.card_w - (float)text_width(app->font_todo_footer, hint2)) / 2.0f, l.footer_y + l.footer_h + 84, ink);
+  draw_text_with_font(app, app->font_todo_footer, hint3, l.card_x + (l.card_w - (float)text_width(app->font_todo_footer, hint3)) / 2.0f, l.footer_y + l.footer_h + 118, ink);
+  pop_clip(app, &old_clip, old_clip_enabled);
+}
+
+static bool parse_game_cell(App *app, char wanted, int *out_x, int *out_y, int *left_y, int *right_y) {
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->preview, lines, &count);
+  int board_y = 0;
+  bool found = false;
+  if (left_y) *left_y = -1;
+  if (right_y) *right_y = -1;
+  for (int i = 0; i < count; i++) {
+    char *line = lines[i];
+    if (line[0] != '|') continue;
+    int len = (int)strlen(line);
+    for (int x = 1; x < len - 1; x++) {
+      char ch = line[x];
+      if ((ch == wanted) && !found) {
+        *out_x = x - 1;
+        *out_y = board_y;
+        found = true;
+      }
+      if ((ch == '#') && left_y && (x <= 3) && (*left_y < 0)) *left_y = board_y;
+      if ((ch == '#') && right_y && (x >= len - 4) && (*right_y < 0)) *right_y = board_y;
+    }
+    board_y++;
+  }
+  return found;
+}
+
+static float smooth_step(float t) {
+  if (t < 0.0f) t = 0.0f;
+  if (t > 1.0f) t = 1.0f;
+  return t * t * (3.0f - (2.0f * t));
+}
+
+static float visual_interp(float from, float to, Uint64 changed_ms, Uint64 duration_ms) {
+  if (duration_ms == 0) return to;
+  float t = (float)(SDL_GetTicks() - changed_ms) / (float)duration_ms;
+  return from + ((to - from) * smooth_step(t));
+}
+
+static void update_ball_visual(GameVisual *v, int bx, int by, int left_y, int right_y, int paddle_x, Uint64 duration_ms) {
+  Uint64 now = SDL_GetTicks();
+  if (!v->initialized) {
+    v->initialized = true;
+    v->target_x = bx;
+    v->target_y = by;
+    v->target_left_y = left_y;
+    v->target_right_y = right_y;
+    v->target_paddle_x = paddle_x;
+    v->from_x = (float)bx;
+    v->from_y = (float)by;
+    v->x = (float)bx;
+    v->y = (float)by;
+    v->left_y = (float)left_y;
+    v->right_y = (float)right_y;
+    v->paddle_x = (float)paddle_x;
+    v->changed_ms = now;
+    return;
+  }
+
+  v->x = visual_interp(v->from_x, (float)v->target_x, v->changed_ms, duration_ms);
+  v->y = visual_interp(v->from_y, (float)v->target_y, v->changed_ms, duration_ms);
+  if ((bx != v->target_x) || (by != v->target_y)) {
+    v->from_x = v->x;
+    v->from_y = v->y;
+    v->target_x = bx;
+    v->target_y = by;
+    v->changed_ms = now;
+  }
+  v->x = visual_interp(v->from_x, (float)v->target_x, v->changed_ms, duration_ms);
+  v->y = visual_interp(v->from_y, (float)v->target_y, v->changed_ms, duration_ms);
+  v->left_y += ((float)left_y - v->left_y) * 0.35f;
+  v->right_y += ((float)right_y - v->right_y) * 0.35f;
+  v->paddle_x += ((float)paddle_x - v->paddle_x) * 0.35f;
+  v->target_left_y = left_y;
+  v->target_right_y = right_y;
+  v->target_paddle_x = paddle_x;
+}
+
+static bool parse_pong_score(App *app, char *score, size_t score_size, char *status, size_t status_size) {
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->preview, lines, &count);
+  if (count < 2) return false;
+  copy_bounded(score, score_size, lines[1]);
+  copy_bounded(status, status_size, count > 2 ? lines[2] : "");
+  return true;
+}
+
+static int parse_frame_number(const char *text) {
+  const char *p = strstr(text, "frame ");
+  if (!p) return 0;
+  return atoi(p + 6);
+}
+
+static float triangle_wave(float phase, float period, float amplitude) {
+  if (period <= 0.0f) return 0.0f;
+  float raw = SDL_fmodf(phase, period);
+  if (raw < 0.0f) raw += period;
+  if (raw <= amplitude) return raw;
+  return period - raw;
+}
+
+static bool parse_arkanoid_header(App *app, char *score, size_t score_size, char *status, size_t status_size) {
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->preview, lines, &count);
+  if (count == 0) return false;
+  const char *header = lines[0];
+  const char *gap = strstr(header, "  ");
+  if (gap) {
+    size_t len = (size_t)(gap - header);
+    if (len >= score_size) len = score_size - 1;
+    memcpy(score, header, len);
+    score[len] = '\0';
+    while (*gap == ' ') gap++;
+    copy_bounded(status, status_size, gap);
+  } else {
+    copy_bounded(score, score_size, header);
+    status[0] = '\0';
+  }
+  return true;
+}
+
+static void render_pong_game(App *app) {
+  AppLayout l = app_layout(app);
+  SDL_Color panel = {12, 18, 25, 255};
+  SDL_Color court = {17, 29, 41, 255};
+  SDL_Color line = {77, 208, 225, 255};
+  SDL_Color player = {84, 190, 255, 255};
+  SDL_Color ai = {255, 190, 95, 255};
+  SDL_Color ball = {255, 245, 160, 255};
+  SDL_Color ink = {236, 241, 247, 255};
+  SDL_Color muted = {156, 168, 182, 255};
+  fill_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, panel);
+
+  char score[64], status[128];
+  if (!parse_pong_score(app, score, sizeof(score), status, sizeof(status))) {
+    snprintf(score, sizeof(score), "0 : 0");
+    snprintf(status, sizeof(status), "Press Space to start");
+  }
+
+  float margin = 42.0f;
+  float header_h = 66.0f;
+  float court_x = l.preview_x + margin;
+  float court_y = l.preview_y + header_h;
+  float court_w = l.preview_w - (margin * 2.0f);
+  float court_h = l.preview_h - header_h - 56.0f;
+  if (court_h > court_w * 0.55f) court_h = court_w * 0.55f;
+  float cell_w = court_w / 34.0f;
+  float cell_h = court_h / 9.0f;
+  float radius = (cell_w < cell_h ? cell_w : cell_h) * 0.42f;
+
+  int score_w = text_width(app->font_todo_input, score);
+  draw_text_with_font(app, app->font_todo_input, score, l.preview_x + (l.preview_w - (float)score_w) / 2.0f, l.preview_y + 18.0f, ink);
+  draw_text(app, status, l.preview_x + 28.0f, l.preview_y + l.preview_h - 34.0f, muted);
+
+  fill_rect(app, court_x, court_y, court_w, court_h, court);
+  stroke_rect(app, court_x, court_y, court_w, court_h, line);
+  for (int y = 0; y < 9; y += 2) fill_rect(app, court_x + court_w / 2.0f - 2.0f, court_y + ((float)y * cell_h) + 8.0f, 4.0f, cell_h * 0.65f, (SDL_Color){80, 110, 130, 255});
+
+  int bx = 16, by = 4, left_y = 3, right_y = 3;
+  parse_game_cell(app, 'O', &bx, &by, &left_y, &right_y);
+  if (bx < 3) bx = 3;
+  if (bx > 30) bx = 30;
+  if (left_y < 0) left_y = 3;
+  if (right_y < 0) right_y = by - 1;
+  if (right_y < 0) right_y = 0;
+  if (right_y > 6) right_y = 6;
+  int frame = parse_frame_number(app->preview);
+  float motion = (float)frame / 4.0f;
+  float ball_x = 3.0f + triangle_wave(motion, 56.0f, 28.0f);
+  float ball_y = 1.0f + triangle_wave(motion, 14.0f, 7.0f);
+  update_ball_visual(&app->pong_visual, bx, by, left_y, right_y, 0, 16);
+  app->pong_visual.x = ball_x;
+  app->pong_visual.y = ball_y;
+  fill_rect(app, court_x + cell_w * 1.2f, court_y + cell_h * app->pong_visual.left_y, cell_w * 0.72f, cell_h * 3.0f, player);
+  fill_rect(app, court_x + cell_w * 32.1f, court_y + cell_h * app->pong_visual.right_y, cell_w * 0.72f, cell_h * 3.0f, ai);
+  fill_circle(app, court_x + (app->pong_visual.x + 0.5f) * cell_w, court_y + (app->pong_visual.y + 0.5f) * cell_h, radius + 7.0f, (SDL_Color){255, 245, 160, 42});
+  fill_circle(app, court_x + (app->pong_visual.x + 0.5f) * cell_w, court_y + (app->pong_visual.y + 0.5f) * cell_h, radius, ball);
+}
+
+static void render_arkanoid_game(App *app) {
+  AppLayout l = app_layout(app);
+  SDL_Color panel = {13, 18, 24, 255};
+  SDL_Color court = {20, 24, 33, 255};
+  SDL_Color wall = {110, 231, 183, 255};
+  SDL_Color paddle = {96, 165, 250, 255};
+  SDL_Color ball = {251, 191, 36, 255};
+  SDL_Color ink = {236, 241, 247, 255};
+  SDL_Color muted = {156, 168, 182, 255};
+  fill_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, panel);
+
+  char score[96], status[96];
+  parse_arkanoid_header(app, score, sizeof(score), status, sizeof(status));
+  draw_text_with_font(app, app->font_todo_input, score, l.preview_x + 32.0f, l.preview_y + 18.0f, ink);
+  int status_w = text_width(app->font_todo_footer, status);
+  draw_text_with_font(app, app->font_todo_footer, status, l.preview_x + l.preview_w - (float)status_w - 32.0f, l.preview_y + 28.0f, muted);
+
+  float margin = 42.0f;
+  float header_h = 72.0f;
+  float court_x = l.preview_x + margin;
+  float court_y = l.preview_y + header_h;
+  float court_w = l.preview_w - (margin * 2.0f);
+  float court_h = l.preview_h - header_h - 42.0f;
+  if (court_h > court_w * 0.62f) court_h = court_w * 0.62f;
+  float cell_w = court_w / 34.0f;
+  float cell_h = court_h / 10.0f;
+  float radius = (cell_w < cell_h ? cell_w : cell_h) * 0.38f;
+  fill_rect(app, court_x, court_y, court_w, court_h, court);
+  stroke_rect(app, court_x, court_y, court_w, court_h, wall);
+
+  bool removed = strstr(app->preview, "Brick removed") != NULL;
+  SDL_Color colors[] = {{248, 113, 113, 255}, {251, 146, 60, 255}, {250, 204, 21, 255}, {74, 222, 128, 255}, {45, 212, 191, 255}};
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 5; col++) {
+      if (removed && (row == 0) && (col <= 1)) continue;
+      float x = court_x + 3.0f * cell_w + (float)col * 6.0f * cell_w;
+      float y = court_y + 0.8f * cell_h + (float)row * 0.82f * cell_h;
+      fill_rect(app, x, y, 5.0f * cell_w, cell_h * 0.52f, colors[(row + col) % 5]);
+    }
+  }
+
+  int bx = 16, by = 5, dummy = -1;
+  parse_game_cell(app, 'O', &bx, &by, &dummy, &dummy);
+  if (bx < 2) bx = 2;
+  if (bx > 31) bx = 31;
+  if (by < 1) by = 1;
+  if (by > 8) by = 8;
+  int paddle_x = 12;
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->preview, lines, &count);
+  for (int i = 0; i < count; i++) {
+    if (lines[i][0] != '|') continue;
+    char *p = strchr(lines[i], '=');
+  if (p) {
+      paddle_x = (int)(p - lines[i]) - 1;
+      break;
+    }
+  }
+  int frame = parse_frame_number(app->preview);
+  float motion = (float)frame / 4.0f;
+  float ball_x = 2.0f + triangle_wave(motion, 56.0f, 28.0f);
+  float ball_y = strstr(app->preview, "Lost") ? 8.0f : 1.0f + triangle_wave(motion, 14.0f, 7.0f);
+  update_ball_visual(&app->arkanoid_visual, bx, by, 0, 0, paddle_x, 16);
+  app->arkanoid_visual.x = ball_x;
+  app->arkanoid_visual.y = ball_y;
+  fill_circle(app, court_x + (app->arkanoid_visual.x + 0.5f) * cell_w, court_y + (app->arkanoid_visual.y + 0.5f) * cell_h, radius + 8.0f, (SDL_Color){251, 191, 36, 44});
+  fill_circle(app, court_x + (app->arkanoid_visual.x + 0.5f) * cell_w, court_y + (app->arkanoid_visual.y + 0.5f) * cell_h, radius, ball);
+  fill_rect(app, court_x + app->arkanoid_visual.paddle_x * cell_w, court_y + 9.1f * cell_h, 8.0f * cell_w, cell_h * 0.45f, paddle);
+  draw_text(app, "A/D or arrows move. Space launches/restarts.", l.preview_x + 28.0f, l.preview_y + l.preview_h - 34.0f, muted);
+}
+
+static void draw_source_panel_content(App *app, AppLayout l, float x, float y) {
+  SDL_Color ink = {236, 241, 247, 255};
+  SDL_Color muted = {156, 168, 182, 255};
+  char lines[MAX_LINES][MAX_LINE];
+  int count = 0;
+  split_lines(app->source_text, lines, &count);
+  int visible = visible_line_count(l.source_h - 70.0f);
+  if (app->source_scroll > count - visible) app->source_scroll = count > visible ? count - visible : 0;
+  int max_cols = 0;
+  for (int i = 0; i < count; i++) {
+    int len = (int)strlen(lines[i]);
+    if (len > max_cols) max_cols = len;
+  }
+  int source_chars_visible = (int)((l.source_w - 74.0f) / 9.0f);
+  if (source_chars_visible < 10) source_chars_visible = 10;
+  if (app->source_x_scroll > max_cols - source_chars_visible) app->source_x_scroll = max_cols > source_chars_visible ? max_cols - source_chars_visible : 0;
+  if (app->source_x_scroll < 0) app->source_x_scroll = 0;
+  char header[256];
+  snprintf(header, sizeof(header), "%s @ line %d col %d", EXAMPLES[app->active].source, app->source_scroll + 1, app->source_x_scroll + 1);
+  draw_text(app, header, x + 20.0f, y + 10.0f, muted);
+  for (int i = 0; i < visible - 1 && i + app->source_scroll < count; i++) {
+    char numbered[MAX_LINE + 32];
+    const char *source_line = lines[i + app->source_scroll];
+    int len = (int)strlen(source_line);
+    const char *shown = app->source_x_scroll < len ? source_line + app->source_x_scroll : "";
+    snprintf(numbered, sizeof(numbered), "%3d: %s", i + app->source_scroll + 1, shown);
+    draw_text(app, numbered, x + 20.0f, y + 42.0f + (float)i * 19.0f, ink);
+  }
+  draw_scrollbar(app, x + l.source_w - 16.0f, y + 14.0f, l.source_h - 48.0f, count, app->source_scroll, visible);
+  if (max_cols > source_chars_visible) {
+    float track_x = x + 20.0f;
+    float track_y = y + l.source_h - 22.0f;
+    float track_w = l.source_w - 52.0f;
+    fill_rect(app, track_x, track_y, track_w, 8, (SDL_Color){48, 54, 62, 255});
+    float thumb_w = track_w * ((float)source_chars_visible / (float)max_cols);
+    if (thumb_w < 28.0f) thumb_w = 28.0f;
+    float max_first = (float)(max_cols - source_chars_visible);
+    float thumb_x = track_x + (track_w - thumb_w) * ((float)app->source_x_scroll / max_first);
+    fill_rect(app, thumb_x, track_y, thumb_w, 8, (SDL_Color){148, 163, 184, 255});
+  }
+}
+
+static void render_source_panel(App *app, AppLayout l, SDL_Color border) {
+  int cache_w = (int)(l.source_w + 0.5f);
+  int cache_h = (int)(l.source_h + 0.5f);
+  bool cache_ok = app->source_cache &&
+    app->source_cache_w == cache_w &&
+    app->source_cache_h == cache_h &&
+    app->source_cache_active == app->active &&
+    app->source_cache_scroll == app->source_scroll &&
+    app->source_cache_x_scroll == app->source_x_scroll;
+
+  if (!cache_ok) {
+    invalidate_source_cache(app);
+    app->source_cache = SDL_CreateTexture(app->renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, cache_w, cache_h);
+    if (app->source_cache) {
+      SDL_SetTextureBlendMode(app->source_cache, SDL_BLENDMODE_BLEND);
+      SDL_Texture *old_target = SDL_GetRenderTarget(app->renderer);
+      SDL_SetRenderTarget(app->renderer, app->source_cache);
+      fill_rect(app, 0, 0, l.source_w, l.source_h, (SDL_Color){21, 26, 33, 255});
+      stroke_rect(app, 0, 0, l.source_w, l.source_h, border);
+      draw_source_panel_content(app, l, 0.0f, 0.0f);
+      SDL_SetRenderTarget(app->renderer, old_target);
+      app->source_cache_w = cache_w;
+      app->source_cache_h = cache_h;
+      app->source_cache_active = app->active;
+      app->source_cache_scroll = app->source_scroll;
+      app->source_cache_x_scroll = app->source_x_scroll;
+    }
+  }
+
+  if (app->source_cache) {
+    SDL_FRect dst = {l.source_x, l.source_y, l.source_w, l.source_h};
+    SDL_RenderTexture(app->renderer, app->source_cache, NULL, &dst);
+  } else {
+    fill_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, (SDL_Color){21, 26, 33, 255});
+    stroke_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, border);
+    draw_source_panel_content(app, l, l.source_x, l.source_y);
+  }
 }
 
 static void render(App *app) {
@@ -687,9 +1313,7 @@ static void render(App *app) {
 
   fill_rect(app, 0, 0, l.left_w, (float)app->height, panel);
   fill_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, (SDL_Color){24, 29, 36, 255});
-  fill_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, (SDL_Color){21, 26, 33, 255});
   stroke_rect(app, l.preview_x, l.preview_y, l.preview_w, l.preview_h, border);
-  stroke_rect(app, l.source_x, l.source_y, l.source_w, l.source_h, border);
   draw_text(app, "Boon-Pony SDL Playground", 236, 14, ink);
   draw_text(app, EXAMPLES[app->active].hint, 236, 844, muted);
   fill_rect(app, 662, 10, 84, 30, (SDL_Color){54, 96, 67, 255});
@@ -708,6 +1332,10 @@ static void render(App *app) {
   int visible = visible_line_count(l.preview_h - 44.0f);
   if (strcmp(EXAMPLES[app->active].id, "todo_mvc") == 0) {
     render_todo_mvc(app);
+  } else if (strcmp(EXAMPLES[app->active].id, "pong") == 0) {
+    render_pong_game(app);
+  } else if (strcmp(EXAMPLES[app->active].id, "arkanoid") == 0) {
+    render_arkanoid_game(app);
   } else {
     split_lines(app->preview, lines, &count);
     if (app->preview_scroll > count - visible) app->preview_scroll = count > visible ? count - visible : 0;
@@ -717,41 +1345,7 @@ static void render(App *app) {
     draw_scrollbar(app, l.preview_x + l.preview_w - 16.0f, l.preview_y + 14.0f, l.preview_h - 32.0f, count, app->preview_scroll, visible);
   }
 
-  split_lines(app->source_text, lines, &count);
-  visible = visible_line_count(l.source_h - 70.0f);
-  if (app->source_scroll > count - visible) app->source_scroll = count > visible ? count - visible : 0;
-  int max_cols = 0;
-  for (int i = 0; i < count; i++) {
-    int len = (int)strlen(lines[i]);
-    if (len > max_cols) max_cols = len;
-  }
-  int source_chars_visible = (int)((l.source_w - 74.0f) / 9.0f);
-  if (source_chars_visible < 10) source_chars_visible = 10;
-  if (app->source_x_scroll > max_cols - source_chars_visible) app->source_x_scroll = max_cols > source_chars_visible ? max_cols - source_chars_visible : 0;
-  if (app->source_x_scroll < 0) app->source_x_scroll = 0;
-  char header[256];
-  snprintf(header, sizeof(header), "%s @ line %d col %d", EXAMPLES[app->active].source, app->source_scroll + 1, app->source_x_scroll + 1);
-  draw_text(app, header, l.source_x + 20.0f, l.source_y + 10.0f, muted);
-  for (int i = 0; i < visible - 1 && i + app->source_scroll < count; i++) {
-    char numbered[MAX_LINE + 32];
-    const char *source_line = lines[i + app->source_scroll];
-    int len = (int)strlen(source_line);
-    const char *shown = app->source_x_scroll < len ? source_line + app->source_x_scroll : "";
-    snprintf(numbered, sizeof(numbered), "%3d: %s", i + app->source_scroll + 1, shown);
-    draw_text(app, numbered, l.source_x + 20.0f, l.source_y + 42.0f + (float)i * 19.0f, ink);
-  }
-  draw_scrollbar(app, l.source_x + l.source_w - 16.0f, l.source_y + 14.0f, l.source_h - 48.0f, count, app->source_scroll, visible);
-  if (max_cols > source_chars_visible) {
-    float track_x = l.source_x + 20.0f;
-    float track_y = l.source_y + l.source_h - 22.0f;
-    float track_w = l.source_w - 52.0f;
-    fill_rect(app, track_x, track_y, track_w, 8, (SDL_Color){48, 54, 62, 255});
-    float thumb_w = track_w * ((float)source_chars_visible / (float)max_cols);
-    if (thumb_w < 28.0f) thumb_w = 28.0f;
-    float max_first = (float)(max_cols - source_chars_visible);
-    float thumb_x = track_x + (track_w - thumb_w) * ((float)app->source_x_scroll / max_first);
-    fill_rect(app, thumb_x, track_y, thumb_w, 8, (SDL_Color){148, 163, 184, 255});
-  }
+  render_source_panel(app, l, border);
   SDL_RenderPresent(app->renderer);
 }
 
@@ -767,9 +1361,14 @@ static void event_interval_tick(App *app) {
 
 static void event_pong(App *app, const char *key) {
   append_expected(app, app->active, "key", key, -1);
-  append_expected(app, app->active, "wait", NULL, -1);
   if (strcmp(key, "Space") == 0) app->pong_started = true;
-  refresh_preview(app);
+  if (app->script || (strcmp(key, "Space") == 0)) {
+    refresh_preview(app);
+    app->game_refresh_pending = false;
+  } else {
+    app->game_refresh_pending = true;
+    app->dirty = true;
+  }
 }
 
 static void event_todo_text(App *app, const char *text) {
@@ -778,8 +1377,9 @@ static void event_todo_text(App *app, const char *text) {
     app->todo_focused = true;
   }
   strncat(app->todo_input, text, sizeof(app->todo_input) - strlen(app->todo_input) - 1);
-  append_expected(app, app->active, "type", app->todo_input, -1);
-  refresh_preview(app);
+  if (app->script) append_expected(app, app->active, "type", app->todo_input, -1);
+  set_preview_input_echo(app);
+  app->dirty = true;
 }
 
 static void event_todo_set_text(App *app, const char *text) {
@@ -800,12 +1400,14 @@ static void event_todo_key(App *app, const char *key) {
   if (strcmp(key, "Backspace") == 0) {
     size_t len = strlen(app->todo_input);
     if (len > 0) app->todo_input[len - 1] = '\0';
-    append_expected(app, app->active, "type", app->todo_input, -1);
+    if (app->script) append_expected(app, app->active, "type", app->todo_input, -1);
+    set_preview_input_echo(app);
   } else {
+    if (!app->script && (strcmp(key, "Enter") == 0)) append_expected(app, app->active, "type", app->todo_input, -1);
     append_expected(app, app->active, "key", key, -1);
     if (strcmp(key, "Enter") == 0) app->todo_input[0] = '\0';
+    refresh_preview(app);
   }
-  refresh_preview(app);
 }
 
 static void event_todo_toggle_all(App *app) {
@@ -877,17 +1479,29 @@ static void event_todo_click(App *app, int x, int y, int clicks) {
     } else {
       append_expected(app, app->active, "focus_input", NULL, 0);
     }
-  } else if ((float)y >= l.footer_y && (float)y <= l.footer_y + l.footer_h && (float)x >= l.card_x + l.card_w - 190.0f) {
-    append_expected(app, app->active, "click_text", "Clear completed", -1);
-  } else if ((float)y >= l.footer_y && (float)y <= l.footer_y + l.footer_h && (float)x >= l.card_x + 292.0f && (float)x < l.card_x + 365.0f) {
-    event_todo_filter(app, "All");
-    return;
-  } else if ((float)y >= l.footer_y && (float)y <= l.footer_y + l.footer_h && (float)x >= l.card_x + 365.0f && (float)x < l.card_x + 470.0f) {
-    event_todo_filter(app, "Active");
-    return;
-  } else if ((float)y >= l.footer_y && (float)y <= l.footer_y + l.footer_h && (float)x >= l.card_x + 470.0f && (float)x < l.card_x + 590.0f) {
-    event_todo_filter(app, "Completed");
-    return;
+  } else if ((float)y >= l.footer_y && (float)y <= l.footer_y + l.footer_h) {
+    float clear_w = l.card_w < 650.0f ? 46.0f : 126.0f;
+    float clear_x = l.card_x + l.card_w - clear_w - 18.0f;
+    float filter_total_w = 248.0f;
+    float filter_x = l.card_x + (l.card_w - filter_total_w) * 0.52f;
+    float min_filter_x = l.card_x + 132.0f;
+    if (filter_x < min_filter_x) filter_x = min_filter_x;
+    if ((filter_x + filter_total_w) > (clear_x - 10.0f)) filter_x = clear_x - filter_total_w - 10.0f;
+    if (filter_x < min_filter_x) filter_x = min_filter_x;
+    if ((float)x >= clear_x - 8.0f && (float)x <= l.card_x + l.card_w - 8.0f) {
+      append_expected(app, app->active, "click_text", "Clear completed", -1);
+    } else if ((float)x >= filter_x - 8.0f && (float)x < filter_x + 58.0f) {
+      event_todo_filter(app, "All");
+      return;
+    } else if ((float)x >= filter_x + 66.0f && (float)x < filter_x + 152.0f) {
+      event_todo_filter(app, "Active");
+      return;
+    } else if ((float)x >= filter_x + 166.0f && (float)x < filter_x + 286.0f) {
+      event_todo_filter(app, "Completed");
+      return;
+    } else {
+      append_expected(app, app->active, "focus_input", NULL, 0);
+    }
   } else {
     append_expected(app, app->active, "focus_input", NULL, 0);
   }
@@ -920,6 +1534,7 @@ static void handle_mouse(App *app, int x, int y, int clicks) {
   } else if (strcmp(id, "arkanoid") == 0) {
     event_pong(app, "Space");
   }
+  app->dirty = true;
 }
 
 static void handle_mouse_window(App *app, float window_x, float window_y, int clicks) {
@@ -943,28 +1558,33 @@ static void handle_wheel_window(App *app, float window_x, float wheel_x, float w
   if (app->source_scroll < 0) app->source_scroll = 0;
   if (app->source_x_scroll < 0) app->source_x_scroll = 0;
   if (app->preview_scroll < 0) app->preview_scroll = 0;
+  app->dirty = true;
 }
 
 static void handle_key(App *app, SDL_Keycode key, SDL_Keymod mod) {
   const char *id = EXAMPLES[app->active].id;
-  if (key == SDLK_ESCAPE || key == SDLK_Q) {
+  if (strcmp(id, "todo_mvc") == 0) {
+    if ((key == SDLK_RETURN) || (key == SDLK_KP_ENTER)) event_todo_key(app, "Enter");
+    else if ((key == SDLK_BACKSPACE) || (key == SDLK_KP_BACKSPACE)) event_todo_key(app, "Backspace");
+    else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_LEFT)) {
+      app->source_x_scroll -= 8;
+      if (app->source_x_scroll < 0) app->source_x_scroll = 0;
+    } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_RIGHT)) {
+      app->source_x_scroll += 8;
+    } else if (key == SDLK_TAB && (mod & SDL_KMOD_SHIFT)) {
+      select_example(app, (app->active + EXAMPLE_COUNT - 1) % EXAMPLE_COUNT);
+    } else if (key == SDLK_TAB) {
+      select_example(app, (app->active + 1) % EXAMPLE_COUNT);
+    } else if (key == SDLK_UP) {
+      app->preview_scroll -= 1;
+      if (app->preview_scroll < 0) app->preview_scroll = 0;
+    } else if (key == SDLK_DOWN) {
+      app->preview_scroll += 1;
+    } else if (key == SDLK_ESCAPE) {
+      app->running = false;
+    }
+  } else if ((key == SDLK_ESCAPE) || ((key == SDLK_Q) && (mod & SDL_KMOD_CTRL))) {
     app->running = false;
-  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_LEFT)) {
-    app->source_x_scroll -= 8;
-    if (app->source_x_scroll < 0) app->source_x_scroll = 0;
-  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_RIGHT)) {
-    app->source_x_scroll += 8;
-  } else if (key == SDLK_TAB || key == SDLK_RIGHT) {
-    select_example(app, (app->active + 1) % EXAMPLE_COUNT);
-  } else if (key == SDLK_LEFT) {
-    select_example(app, (app->active + EXAMPLE_COUNT - 1) % EXAMPLE_COUNT);
-  } else if (key == SDLK_R) {
-    clear_active(app);
-  } else if ((strcmp(id, "counter") == 0) || (strcmp(id, "counter_hold") == 0)) {
-    if (key == SDLK_RETURN || key == SDLK_SPACE) event_counter(app);
-  } else if (strcmp(id, "todo_mvc") == 0) {
-    if (key == SDLK_RETURN) event_todo_key(app, "Enter");
-    else if (key == SDLK_BACKSPACE) event_todo_key(app, "Backspace");
   } else if (strcmp(id, "pong") == 0) {
     if (key == SDLK_SPACE) event_pong(app, "Space");
     else if (key == SDLK_W || key == SDLK_UP) event_pong(app, "W");
@@ -974,7 +1594,28 @@ static void handle_key(App *app, SDL_Keycode key, SDL_Keymod mod) {
     else if (key == SDLK_A || key == SDLK_LEFT) event_pong(app, "A");
     else if (key == SDLK_D || key == SDLK_RIGHT) event_pong(app, "D");
     else if (key == SDLK_L) event_pong(app, "L");
+  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_LEFT)) {
+    app->source_x_scroll -= 8;
+    if (app->source_x_scroll < 0) app->source_x_scroll = 0;
+  } else if ((mod & SDL_KMOD_SHIFT) && (key == SDLK_RIGHT)) {
+    app->source_x_scroll += 8;
+  } else if (key == SDLK_TAB && (mod & SDL_KMOD_SHIFT)) {
+    select_example(app, (app->active + EXAMPLE_COUNT - 1) % EXAMPLE_COUNT);
+  } else if (key == SDLK_TAB) {
+    select_example(app, (app->active + 1) % EXAMPLE_COUNT);
+  } else if (key == SDLK_F5) {
+    refresh_preview(app);
+  } else if ((key == SDLK_R) && (mod & SDL_KMOD_CTRL)) {
+    clear_active(app);
+  } else if ((strcmp(id, "counter") == 0) || (strcmp(id, "counter_hold") == 0)) {
+    if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_SPACE) event_counter(app);
+  } else if (key == SDLK_UP) {
+    app->preview_scroll -= 1;
+    if (app->preview_scroll < 0) app->preview_scroll = 0;
+  } else if (key == SDLK_DOWN) {
+    app->preview_scroll += 1;
   }
+  app->dirty = true;
 }
 
 static void pump_timers(App *app) {
@@ -985,11 +1626,15 @@ static void pump_timers(App *app) {
       app->last_interval_ms = now;
       event_interval_tick(app);
     }
-  } else if (strcmp(id, "pong") == 0 && app->pong_started) {
-    if (now - app->last_pong_ms >= 120) {
+  } else if (((strcmp(id, "pong") == 0) || (strcmp(id, "arkanoid") == 0)) && app->pong_started) {
+    if (now - app->last_pong_ms >= 16) {
       app->last_pong_ms = now;
       append_expected(app, app->active, "wait", NULL, -1);
       refresh_preview(app);
+      app->game_refresh_pending = false;
+    } else if (app->game_refresh_pending) {
+      refresh_preview(app);
+      app->game_refresh_pending = false;
     }
   }
 }
@@ -1005,6 +1650,7 @@ static bool init_sdl(App *app, bool script) {
   app->renderer = SDL_CreateRenderer(app->window, NULL);
   if (!app->renderer) return false;
   update_render_size(app);
+  if (!script) SDL_SetRenderVSync(app->renderer, 1);
   app->font = TTF_OpenFont(".boon-local/gui/fonts/JetBrainsMono-Regular.ttf", 15.0f);
   if (!app->font) return false;
   app->font_todo_title = open_todo_font(84.0f);
@@ -1017,6 +1663,7 @@ static bool init_sdl(App *app, bool script) {
 }
 
 static void shutdown_sdl(App *app) {
+  if (app->source_cache) SDL_DestroyTexture(app->source_cache);
   if (app->font_todo_footer) TTF_CloseFont(app->font_todo_footer);
   if (app->font_todo_item) TTF_CloseFont(app->font_todo_item);
   if (app->font_todo_input) TTF_CloseFont(app->font_todo_input);
@@ -1143,8 +1790,23 @@ static void expect_todo_visual_contract(App *app) {
   TodoModel model;
   parse_todo_model(app->preview, &model);
   TodoLayout l = todo_layout_for_count(app, model.item_count);
-  bool pass = (l.card_w >= 600.0f) && (l.input_h >= 60.0f) && (l.row_h >= 54.0f) && model.input_focused && (model.item_count >= 2);
-  record_check(app, EXAMPLES[app->active].id, "styled TodoMVC card matches reference structure", pass, "large title, white card, focused input, rows, filters, footer");
+  bool pass = (l.card_w <= l.preview_w) && (l.card_x >= l.preview_x) && ((l.card_x + l.card_w) <= (l.preview_x + l.preview_w)) &&
+    (l.input_h >= 60.0f) && (l.row_h >= 54.0f) && model.input_focused && (model.item_count >= 2);
+  record_check(app, EXAMPLES[app->active].id, "styled TodoMVC card matches reference structure", pass, "card stays inside preview, focused input, rows, filters, footer");
+}
+
+static void expect_todo_narrow_window_contract(App *app) {
+  int old_w = app->width;
+  int old_h = app->height;
+  app->width = 960;
+  app->height = 1000;
+  TodoModel model;
+  parse_todo_model(app->preview, &model);
+  TodoLayout l = todo_layout_for_count(app, model.item_count);
+  bool pass = (l.card_x >= l.preview_x) && ((l.card_x + l.card_w) <= (l.preview_x + l.preview_w)) && (l.card_w <= l.preview_w);
+  record_check(app, EXAMPLES[app->active].id, "TodoMVC narrow window does not overflow preview", pass, "960px window keeps card inside preview");
+  app->width = old_w;
+  app->height = old_h;
 }
 
 static void expect_todo_scroll_contract(App *app, const char *name) {
@@ -1180,6 +1842,10 @@ static int run_script(App *app, const char *report) {
       expect_contains(app, "initial value", "0+");
       event_counter(app);
       expect_contains(app, "incremented value", "1+");
+      int before = app->active;
+      handle_key(app, SDLK_RIGHT, 0);
+      handle_key(app, SDLK_LEFT, 0);
+      record_check(app, EXAMPLES[app->active].id, "plain arrows do not switch examples", app->active == before, "Tab switches examples; arrows stay in preview");
     } else if ((strcmp(id, "interval") == 0) || (strcmp(id, "interval_hold") == 0)) {
       expect_empty(app, "initial empty interval frame");
       event_interval_tick(app);
@@ -1192,6 +1858,7 @@ static int run_script(App *app, const char *report) {
       expect_contains(app, "initial focused input", "Input: |");
       expect_todo_model(app, "initial generated model", 2, 2, "All", "", true);
       expect_todo_visual_contract(app);
+      expect_todo_narrow_window_contract(app);
       record_check(app, EXAMPLES[app->active].id, "styled TodoMVC screenshot saved", save_screenshot(app, "build/reports/gui-todomvc-visual.bmp"), "build/reports/gui-todomvc-visual.bmp");
       TodoModel click_model;
       parse_todo_model(app->preview, &click_model);
@@ -1223,11 +1890,27 @@ static int run_script(App *app, const char *report) {
       clear_active(app);
       event_todo_text(app, "Alpha");
       expect_contains(app, "typed full input", "Input: Alpha|");
+      Uint64 typing_start = SDL_GetTicks();
+      for (int repeat = 0; repeat < 120; repeat++) {
+        event_todo_text(app, "a");
+        render(app);
+      }
+      Uint64 typing_elapsed = SDL_GetTicks() - typing_start;
+      char typing_expected[160];
+      snprintf(typing_expected, sizeof(typing_expected), "%llu ms < 1200ms for 120 repeated text inputs with cached source panel", (unsigned long long)typing_elapsed);
+      record_check(app, EXAMPLES[app->active].id, "held letter typing render budget", typing_elapsed < 1200, typing_expected);
+      clear_active(app);
+      event_todo_text(app, "Alpha");
+      handle_key(app, SDLK_R, 0);
+      handle_key(app, SDLK_Q, 0);
+      expect_contains(app, "letter shortcut keys are ignored while typing", "Input: Alpha|");
+      record_check(app, EXAMPLES[app->active].id, "Q does not quit while typing", app->running, "plain Q remains text input safe in TodoMVC");
       event_todo_key(app, "Backspace");
       expect_contains(app, "backspace updates focused input", "Input: Alph|");
       event_todo_text(app, "a");
-      event_todo_key(app, "Enter");
+      handle_key(app, SDLK_KP_ENTER, 0);
       expect_contains(app, "added Alpha", "Alpha");
+      expect_todo_model(app, "keypad enter keeps input focused after add", 3, 3, "All", "", true);
       expect_todo_model(app, "input stays focused after Enter", 3, 3, "All", "", true);
       event_todo_text(app, "Beta");
       event_todo_key(app, "Enter");
@@ -1300,12 +1983,37 @@ static int run_script(App *app, const char *report) {
       expect_contains(app, "initial pong prompt", "Press Space");
       event_pong(app, "Space");
       expect_contains(app, "pong started", "Pong generated runtime");
+      char first_frame[MAX_TEXT];
+      copy_bounded(first_frame, sizeof(first_frame), app->preview);
+      append_expected(app, app->active, "wait", NULL, -1);
+      refresh_preview(app);
+      record_check(app, EXAMPLES[app->active].id, "pong ball advances on generated wait frame", strcmp(first_frame, app->preview) != 0, "generated frame text changes after wait");
       event_pong(app, "W");
       event_pong(app, "S");
       expect_contains(app, "pong controls hint", "AI follows ball");
+      int pong_before = app->active;
+      handle_key(app, SDLK_UP, 0);
+      handle_key(app, SDLK_DOWN, 0);
+      record_check(app, EXAMPLES[app->active].id, "pong arrow keys stay in game", app->active == pong_before, "Up/Down control Pong instead of switching tabs");
+      render(app);
+      record_check(app, EXAMPLES[app->active].id, "styled Pong screenshot saved", save_screenshot(app, "build/reports/gui-pong-visual.bmp"), "build/reports/gui-pong-visual.bmp");
     } else if (strcmp(id, "arkanoid") == 0) {
       event_pong(app, "Space");
       expect_contains(app, "arkanoid animates", "Score:");
+      char first_frame[MAX_TEXT];
+      copy_bounded(first_frame, sizeof(first_frame), app->preview);
+      for (int tick = 0; tick < 8; tick++) {
+        append_expected(app, app->active, "wait", NULL, -1);
+      }
+      refresh_preview(app);
+      record_check(app, EXAMPLES[app->active].id, "arkanoid ball advances on generated wait frames", strcmp(first_frame, app->preview) != 0, "generated frame text changes after waits");
+      expect_contains(app, "arkanoid brick removal appears", "Brick removed");
+      int arkanoid_before = app->active;
+      handle_key(app, SDLK_LEFT, 0);
+      handle_key(app, SDLK_RIGHT, 0);
+      record_check(app, EXAMPLES[app->active].id, "arkanoid arrow keys stay in game", app->active == arkanoid_before, "Left/Right control Arkanoid instead of switching tabs");
+      render(app);
+      record_check(app, EXAMPLES[app->active].id, "styled Arkanoid screenshot saved", save_screenshot(app, "build/reports/gui-arkanoid-visual.bmp"), "build/reports/gui-arkanoid-visual.bmp");
     }
     render(app);
     frames++;
@@ -1351,16 +2059,24 @@ int main(int argc, char **argv) {
 
   if (script) {
     int status = run_script(&app, report);
+    protocol_session_close(&app);
     for (int i = 0; i < EXAMPLE_COUNT; i++) free_history(&app.history[i]);
     shutdown_sdl(&app);
     return status;
   }
+
+  render(&app);
+  app.last_render_ms = SDL_GetTicks();
+  app.dirty = false;
+  SDL_Delay(16);
+  render(&app);
 
   int frames = 0;
   while (app.running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) app.running = false;
+      else if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) app.dirty = true;
       else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) handle_mouse_window(&app, event.button.x, event.button.y, event.button.clicks);
       else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         handle_wheel_window(&app, event.wheel.mouse_x, event.wheel.x, event.wheel.y);
@@ -1371,12 +2087,21 @@ int main(int argc, char **argv) {
       }
     }
     pump_timers(&app);
-    render(&app);
-    frames++;
+    const char *id = EXAMPLES[app.active].id;
+    bool active_game = app.pong_started && ((strcmp(id, "pong") == 0) || (strcmp(id, "arkanoid") == 0));
+    bool needs_cursor_blink = strcmp(id, "todo_mvc") == 0;
+    Uint64 now = SDL_GetTicks();
+    if (app.dirty || active_game || (needs_cursor_blink && (now - app.last_render_ms >= 250))) {
+      render(&app);
+      app.last_render_ms = now;
+      app.dirty = false;
+      frames++;
+    }
     SDL_Delay(16);
   }
 
   write_report(report, "pass", &app, frames);
+  protocol_session_close(&app);
   for (int i = 0; i < EXAMPLE_COUNT; i++) free_history(&app.history[i]);
   shutdown_sdl(&app);
   return 0;

@@ -565,7 +565,7 @@ primitive NativeGui
     (@system("test -x .boon-local/gui/bin/boon_sdl_bridge_smoke && SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_bridge_smoke >/dev/null 2>&1".cstring()) == 0)
 
   fun _local_sdl_playground(): Bool =>
-    (@system("test -x .boon-local/gui/bin/boon_sdl_playground && SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_playground --script tests/examples/gui_playground_sequence.json --report build/cache/gui-sdl-doctor.json >/dev/null 2>&1".cstring()) == 0)
+    (@system("test -x .boon-local/gui/bin/boon_sdl_playground && SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software LD_LIBRARY_PATH=.boon-local/gui/prefix/lib:${LD_LIBRARY_PATH:-} .boon-local/gui/bin/boon_sdl_playground --script tests/examples/gui_playground_sequence.json --report build/cache/gui-sdl-doctor-$$.json >/dev/null 2>&1".cstring()) == 0)
 
   fun _sdl_playground_command(example: String, script: String, report: String): String =>
     let command = String

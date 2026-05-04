@@ -117,6 +117,8 @@ primitive NativePty
     let session = "boonpony_native_pty_playground"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui") +
       _wait(session, "Boon-Pony TUI | Counter") +
+      _send_literal(session, "[") + _send_literal(session, "]") +
+      _wait(session, "Boon-Pony TUI | Counter") +
       _send_mouse(session, "80", "7") +
       _sleep("1") +
       _send_key(session, "Enter") +
@@ -300,26 +302,26 @@ primitive NativePty
     let session = "boonpony_native_pty_playground_todo_scroll"
     let command = _pty_prefix(session, "132", "40", "build/bin/boonpony tui --example todo_mvc") +
       _wait(session, "Input: |") +
-      _send_literal(session, "A01") + _send_key(session, "Enter") +
-      _send_literal(session, "A02") + _send_key(session, "Enter") +
-      _send_literal(session, "A03") + _send_key(session, "Enter") +
-      _send_literal(session, "A04") + _send_key(session, "Enter") +
-      _send_literal(session, "A05") + _send_key(session, "Enter") +
-      _send_literal(session, "A06") + _send_key(session, "Enter") +
-      _send_literal(session, "A07") + _send_key(session, "Enter") +
-      _send_literal(session, "A08") + _send_key(session, "Enter") +
-      _send_literal(session, "A09") + _send_key(session, "Enter") +
-      _send_literal(session, "A10") + _send_key(session, "Enter") +
-      _send_literal(session, "A11") + _send_key(session, "Enter") +
-      _send_literal(session, "A12") + _send_key(session, "Enter") +
-      _send_literal(session, "A13") + _send_key(session, "Enter") +
-      _send_literal(session, "A14") + _send_key(session, "Enter") +
-      _send_literal(session, "A15") + _send_key(session, "Enter") +
-      _send_literal(session, "A16") + _send_key(session, "Enter") +
-      _send_literal(session, "A17") + _send_key(session, "Enter") +
-      _send_literal(session, "A18") + _send_key(session, "Enter") +
-      _send_literal(session, "A19") + _send_key(session, "Enter") +
-      _send_literal(session, "A20") + _send_key(session, "Enter") +
+      _todo_add(session, "A01") +
+      _todo_add(session, "A02") +
+      _todo_add(session, "A03") +
+      _todo_add(session, "A04") +
+      _todo_add(session, "A05") +
+      _todo_add(session, "A06") +
+      _todo_add(session, "A07") +
+      _todo_add(session, "A08") +
+      _todo_add(session, "A09") +
+      _todo_add(session, "A10") +
+      _todo_add(session, "A11") +
+      _todo_add(session, "A12") +
+      _todo_add(session, "A13") +
+      _todo_add(session, "A14") +
+      _todo_add(session, "A15") +
+      _todo_add(session, "A16") +
+      _todo_add(session, "A17") +
+      _todo_add(session, "A18") +
+      _todo_add(session, "A19") +
+      _todo_add(session, "A20") +
       "tmux capture-pane -p -S -200 -t " + _shell_quote(session) + " > " + _shell_quote(out) + "; " +
       "if tmux capture-pane -p -t " + _shell_quote(session) + " | grep -q 'A20'; then echo 'todo scroll failed: A20 visible before scroll' >> " + _shell_quote(out) + "; exit 1; fi; " +
       _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") + _send_key(session, "Down") +
@@ -439,6 +441,9 @@ primitive NativePty
 
   fun _send_literal(session: String, text: String): String =>
     "tmux send-keys -t " + _shell_quote(session) + " -l " + _shell_quote(text) + "; sleep 0.20; "
+
+  fun _todo_add(session: String, text: String): String =>
+    _send_literal(session, text) + _send_key(session, "Enter") + _wait(session, text)
 
   fun _send_mouse(session: String, x: String, y: String): String =>
     "printf '\\033[<0;" + x + ";" + y + "M\\033[<0;" + x + ";" + y + "m' | tmux load-buffer -; tmux paste-buffer -t " + _shell_quote(session) + "; sleep 0.20; "

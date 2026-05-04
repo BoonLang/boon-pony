@@ -146,6 +146,7 @@ build_sdl_playground() {
   mkdir -p "$BIN"
   cc "$ROOT/native/boon_sdl_playground.c" \
     -o "$BIN/boon_sdl_playground" \
+    -O3 -DNDEBUG \
     -Wall -Wextra -Wno-unused-parameter \
     $(pkg-config --cflags --libs sdl3 sdl3-ttf)
   SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software "$BIN/boon_sdl_playground" \
