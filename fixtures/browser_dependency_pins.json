@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "local_prefix": ".boon-local/browser",
+  "dependencies": {
+    "emsdk": {
+      "version": "5.0.6",
+      "git_url": "https://github.com/emscripten-core/emsdk.git",
+      "revision": "948c31acd3f369a5da276e33ab2ed57108c165e5",
+      "description": "Repo-local Emscripten SDK used for the Pony WebAssembly runtime port."
+    },
+    "ponyc_source": {
+      "version": "0.63.4",
+      "git_url": "https://github.com/ponylang/ponyc.git",
+      "revision": "5416606010999b1e3cd524f32455eb981de6b191",
+      "description": "Pinned Pony compiler/runtime source for building or patching libponyrt for wasm32-unknown-emscripten."
+    },
+    "web_ext": {
+      "version": "10.1.0",
+      "package": "web-ext",
+      "description": "Repo-local Firefox extension runner if a Firefox extension harness is needed for proof collection."
+    },
+    "browser_contract": {
+      "renderer": "canvas2d",
+      "browser": "firefox",
+      "requires_cross_origin_isolation": true,
+      "requires_shared_array_buffer": true,
+      "requires_pony_wasm": true,
+      "native_runtime_fallback_allowed": false,
+      "javascript_runtime_fallback_allowed": false
+    }
+  }
+}

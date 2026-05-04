@@ -7,9 +7,11 @@ actor Main
       match command
       | "--help" => Help.root(env)
       | "-h" => Help.root(env)
-      | "tui" => _command_tui(env)
-      | "gui" => _command_gui(env)
-      | "play" => _command_play(env)
+	      | "tui" => _command_tui(env)
+	      | "gui" => _command_gui(env)
+	      | "browser" => _command_browser(env)
+	      | "browser-build" => _command_browser_build(env)
+	      | "play" => _command_play(env)
       | "manifest" => _command_manifest(env)
       | "import-upstream" => _command_import_upstream(env)
       | "parse" => _command_parse(env)
@@ -21,7 +23,8 @@ actor Main
       | "verify" => _command_verify(env)
       | "verify-terminal" => _command_verify_terminal(env)
       | "verify-terminal-safety" => _command_verify_terminal_safety(env)
-      | "verify-gui" => _command_verify_gui(env)
+	      | "verify-gui" => _command_verify_gui(env)
+	      | "verify-browser" => _command_verify_browser(env)
       | "verify-pty" => _command_verify_pty(env)
       | "snapshot" => _command_snapshot(env)
       | "protocol-smoke" => _command_protocol_smoke(env)
@@ -31,13 +34,110 @@ actor Main
         Help.root(env)
         env.exitcode(2)
       end
-    else
-      Help.root(env)
-    end
+	    else
+	      Help.root(env)
+	    end
 
-  fun _command_gui(env: Env) =>
-    if _has_help(env) then
-      Help.gui(env)
+	  fun _command_browser(env: Env) =>
+	    if _has_help(env) then
+	      Help.browser(env)
+	      return
+	    end
+
+	    var doctor = false
+	    var bootstrap = false
+	    var serve = false
+	    var renderer: String = "canvas2d"
+	    var example: String = "counter"
+	    var index: USize = 2
+	    while index < env.args.size() do
+	      try
+	        let arg = env.args(index)?
+	        if arg == "--doctor" then
+	          doctor = true
+	          index = index + 1
+	        elseif arg == "--bootstrap" then
+	          bootstrap = true
+	          index = index + 1
+	        elseif arg == "--serve" then
+	          serve = true
+	          index = index + 1
+	        elseif arg == "--renderer" then
+	          renderer = env.args(index + 1)?
+	          index = index + 2
+	        elseif arg == "--example" then
+	          example = env.args(index + 1)?
+	          index = index + 2
+	        else
+	          env.err.print("error: unknown browser option: " + arg)
+	          Help.browser(env)
+	          env.exitcode(2)
+	          return
+	        end
+	      else
+	        env.err.print("error: browser option is missing a value")
+	        Help.browser(env)
+	        env.exitcode(2)
+	        return
+	      end
+	    end
+
+	    if (doctor and serve) or (doctor and bootstrap) or (bootstrap and serve) then
+	      env.err.print("error: browser mode options cannot be combined")
+	      Help.browser(env)
+	      env.exitcode(2)
+	    elseif doctor then
+	      NativeBrowser.doctor_command(env)
+	    elseif bootstrap then
+	      NativeBrowser.bootstrap_command(env)
+	    elseif serve then
+	      NativeBrowser.serve_command(env, renderer, example)
+		    else
+		      env.err.print("error: browser currently requires --doctor, --bootstrap, or --serve")
+	      Help.browser(env)
+	      env.exitcode(2)
+	    end
+
+	  fun _command_browser_build(env: Env) =>
+	    if _has_help(env) then
+	      Help.browser_build(env)
+	      return
+	    end
+
+	    var all = false
+	    var renderer: String = "canvas2d"
+	    var out_dir: String = "build/browser"
+	    var index: USize = 2
+	    while index < env.args.size() do
+	      try
+	        let arg = env.args(index)?
+	        if arg == "--all" then
+	          all = true
+	          index = index + 1
+	        elseif arg == "--renderer" then
+	          renderer = env.args(index + 1)?
+	          index = index + 2
+	        elseif arg == "--out" then
+	          out_dir = env.args(index + 1)?
+	          index = index + 2
+	        else
+	          env.err.print("error: unknown browser-build option: " + arg)
+	          Help.browser_build(env)
+	          env.exitcode(2)
+	          return
+	        end
+	      else
+	        env.err.print("error: browser-build option is missing a value")
+	        Help.browser_build(env)
+	        env.exitcode(2)
+	        return
+	      end
+	    end
+	    NativeBrowser.build_command(env, all, renderer, out_dir)
+
+	  fun _command_gui(env: Env) =>
+	    if _has_help(env) then
+	      Help.gui(env)
       return
     end
 
@@ -625,7 +725,7 @@ actor Main
     end
     NativeSafety.verify_command(env, pty, report)
 
-  fun _command_verify_gui(env: Env) =>
+	  fun _command_verify_gui(env: Env) =>
     if _has_help(env) then
       Help.verify_gui(env)
       return
@@ -659,10 +759,51 @@ actor Main
         env.exitcode(2)
         return
       end
-    end
-    NativeGui.verify_command(env, all, backend, report)
+	    end
+	    NativeGui.verify_command(env, all, backend, report)
 
-  fun _command_verify_pty(env: Env) =>
+	  fun _command_verify_browser(env: Env) =>
+	    if _has_help(env) then
+	      Help.verify_browser(env)
+	      return
+	    end
+
+	    var all = false
+	    var browser: String = "firefox"
+	    var renderer: String = "canvas2d"
+	    var report: String = "build/reports/verify-browser-firefox.json"
+	    var index: USize = 2
+	    while index < env.args.size() do
+	      try
+	        let arg = env.args(index)?
+	        if arg == "--all" then
+	          all = true
+	          index = index + 1
+	        elseif arg == "--browser" then
+	          browser = env.args(index + 1)?
+	          index = index + 2
+	        elseif arg == "--renderer" then
+	          renderer = env.args(index + 1)?
+	          index = index + 2
+	        elseif arg == "--report" then
+	          report = env.args(index + 1)?
+	          index = index + 2
+	        else
+	          env.err.print("error: unknown verify-browser option: " + arg)
+	          Help.verify_browser(env)
+	          env.exitcode(2)
+	          return
+	        end
+	      else
+	        env.err.print("error: verify-browser option is missing a value")
+	        Help.verify_browser(env)
+	        env.exitcode(2)
+	        return
+	      end
+	    end
+	    NativeBrowser.verify_command(env, all, browser, renderer, report)
+
+	  fun _command_verify_pty(env: Env) =>
     if _has_help(env) then
       Help.verify_pty(env)
       return
@@ -745,9 +886,11 @@ primitive Help
     env.out.print("")
     env.out.print("Usage:")
     env.out.print("  boonpony --help")
-    env.out.print("  boonpony tui [--help] [--example <name>] [--script <path>]")
-    env.out.print("  boonpony gui [--help] [--example <name>] [--backend headless|sdl3]")
-    env.out.print("  boonpony play [--help] <project>")
+	    env.out.print("  boonpony tui [--help] [--example <name>] [--script <path>]")
+	    env.out.print("  boonpony gui [--help] [--example <name>] [--backend headless|sdl3]")
+	    env.out.print("  boonpony browser [--help] [--doctor|--bootstrap|--serve] [--renderer canvas2d] [--example <name>]")
+	    env.out.print("  boonpony browser-build --all --renderer canvas2d --out build/browser")
+	    env.out.print("  boonpony play [--help] <project>")
     env.out.print("  boonpony manifest --check")
     env.out.print("  boonpony import-upstream --source <path-or-git-url> --commit <sha>")
     env.out.print("  boonpony parse <file>")
@@ -760,15 +903,37 @@ primitive Help
     env.out.print("  boonpony verify <project-or---all>")
     env.out.print("  boonpony verify-terminal <project-or---all> [--filter playground]")
     env.out.print("  boonpony verify-terminal-safety --pty")
-    env.out.print("  boonpony verify-gui --all [--backend headless|sdl3]")
+	    env.out.print("  boonpony verify-gui --all [--backend headless|sdl3]")
+	    env.out.print("  boonpony verify-browser --all --browser firefox --renderer canvas2d")
     env.out.print("  boonpony verify-pty --all")
     env.out.print("  boonpony snapshot <project> --size 80x24 --frames 120")
     env.out.print("  boonpony bench <project-or---all>")
     env.out.print("")
     env.out.print("Source of truth:")
-    env.out.print("  BOON_PONY_TUI_PLAN.md")
+	    env.out.print("  BOON_PONY_TUI_PLAN.md")
 
-  fun tui(env: Env) =>
+	  fun browser(env: Env) =>
+	    env.out.print("boonpony browser - Firefox browser playground addendum")
+	    env.out.print("")
+	    env.out.print("Usage:")
+	    env.out.print("  boonpony browser --doctor")
+	    env.out.print("  boonpony browser --bootstrap")
+	    env.out.print("  boonpony browser --serve --renderer canvas2d --example todo_mvc")
+	    env.out.print("")
+	    env.out.print("Contract:")
+	    env.out.print("  Browser success requires generated Pony running inside WebAssembly.")
+	    env.out.print("  Native/server/JavaScript behavior fallbacks are reported as failures.")
+
+	  fun browser_build(env: Env) =>
+	    env.out.print("boonpony browser-build - build the static Firefox playground bundle")
+	    env.out.print("")
+	    env.out.print("Usage:")
+	    env.out.print("  boonpony browser-build --all --renderer canvas2d --out build/browser")
+	    env.out.print("")
+	    env.out.print("Contract:")
+	    env.out.print("  The bundle is incomplete until it contains a Pony-origin wasm module.")
+
+	  fun tui(env: Env) =>
     env.out.print("boonpony tui - full-screen terminal playground")
     env.out.print("")
     env.out.print("Usage:")
@@ -887,12 +1052,21 @@ primitive Help
     env.out.print("Usage:")
     env.out.print("  boonpony verify-terminal-safety --pty")
 
-  fun verify_gui(env: Env) =>
+	  fun verify_gui(env: Env) =>
     env.out.print("boonpony verify-gui - verify graphical playground scenes")
     env.out.print("")
     env.out.print("Usage:")
-    env.out.print("  boonpony verify-gui --all --backend headless --report build/reports/verify-gui-headless.json")
-    env.out.print("  boonpony verify-gui --all --backend sdl3 --report build/reports/verify-gui-sdl3.json")
+	    env.out.print("  boonpony verify-gui --all --backend headless --report build/reports/verify-gui-headless.json")
+	    env.out.print("  boonpony verify-gui --all --backend sdl3 --report build/reports/verify-gui-sdl3.json")
+
+	  fun verify_browser(env: Env) =>
+	    env.out.print("boonpony verify-browser - verify the Firefox browser playground")
+	    env.out.print("")
+	    env.out.print("Usage:")
+	    env.out.print("  boonpony verify-browser --all --browser firefox --renderer canvas2d --report build/reports/verify-browser-firefox.json")
+	    env.out.print("")
+	    env.out.print("Contract:")
+	    env.out.print("  This gate fails unless Pony code runs inside browser WebAssembly.")
 
   fun verify_pty(env: Env) =>
     env.out.print("boonpony verify-pty - run real PTY smoke proofs")
